@@ -24,10 +24,172 @@ import SavedResultsPanel from "./components/SavedResultsPanel";
 import SystemDetails from "./components/SystemDetails";
 
 const AUTO_APPLY_DELAY_MS = 350;
+const DEV_UI_MOCK_MODE = import.meta.env.DEV;
+
+function createDevMockSnapshot() {
+  const now = Date.now();
+  return {
+    session: {
+      stage: "MONITORING",
+      monitoringActive: true,
+      monitoringStartedAtMs: now - 9_500,
+      monitoringElapsedMs: 9_500,
+      hostStartSensorNanos: 1_000_000_000,
+      hostStopSensorNanos: null,
+      hostSplitMarks: [
+        { roleLabel: "Split 1", elapsedNanos: 4_320_000_000 },
+        { roleLabel: "Split 2", elapsedNanos: 7_910_000_000 },
+      ],
+      roleOptions: ["Unassigned", "Start", "Split 1", "Split 2", "Split 3", "Split 4", "Stop"],
+      runId: "dev-ui-mock",
+    },
+    clients: [
+      {
+        roleTarget: "dev-device-1",
+        senderDeviceName: "Pixel 8 Pro",
+        assignedRole: "Start",
+        sensitivity: 100,
+        distanceMeters: 0,
+        cameraFacing: "rear",
+        telemetryLatencyMs: 14,
+        telemetryClockSynced: true,
+      },
+      {
+        roleTarget: "dev-device-2",
+        senderDeviceName: "Galaxy S24",
+        assignedRole: "Split 1",
+        sensitivity: 98,
+        distanceMeters: 10,
+        cameraFacing: "rear",
+        telemetryLatencyMs: 19,
+        telemetryClockSynced: true,
+      },
+      {
+        roleTarget: "dev-device-3",
+        senderDeviceName: "iPhone 15",
+        assignedRole: "Stop",
+        sensitivity: 95,
+        distanceMeters: 20,
+        cameraFacing: "rear",
+        telemetryLatencyMs: 16,
+        telemetryClockSynced: true,
+      },
+    ],
+    latestLapResults: [
+      {
+        id: "dev-lap-split-1",
+        roleLabel: "Split 1",
+        senderDeviceName: "Galaxy S24",
+        distanceMeters: 10,
+        elapsedNanos: 4_320_000_000,
+        lapElapsedNanos: 4_320_000_000,
+        lapSpeedMps: 2.31,
+      },
+      {
+        id: "dev-lap-split-2",
+        roleLabel: "Split 2",
+        senderDeviceName: "Galaxy S24",
+        distanceMeters: 15,
+        elapsedNanos: 7_910_000_000,
+        lapElapsedNanos: 3_590_000_000,
+        lapSpeedMps: 1.39,
+      },
+      {
+        id: "dev-lap-stop",
+        roleLabel: "Stop",
+        senderDeviceName: "iPhone 15",
+        distanceMeters: 20,
+        elapsedNanos: 9_480_000_000,
+        lapElapsedNanos: 1_570_000_000,
+        lapSpeedMps: 3.18,
+      },
+    ],
+    recentEvents: [
+      { id: "dev-evt-1", message: "Monitoring active (dev mock)", level: "info", timestampIso: new Date(now - 8000).toISOString() },
+      { id: "dev-evt-2", message: "Split 1 captured", level: "info", timestampIso: new Date(now - 5200).toISOString() },
+      { id: "dev-evt-3", message: "Split 2 captured", level: "info", timestampIso: new Date(now - 1600).toISOString() },
+    ],
+    resultsExport: {
+      lastSavedFilePath: "",
+      lastSavedAtIso: "",
+    },
+    stats: {
+      knownTypes: {
+        SESSION_SNAPSHOT: 42,
+        TELEMETRY: 315,
+      },
+    },
+  };
+}
+
+function applyDevMockControl(currentSnapshot: any, path: string, body: any) {
+  if (!currentSnapshot || typeof currentSnapshot !== "object") {
+    return currentSnapshot;
+  }
+
+  const nextSnapshot = {
+    ...currentSnapshot,
+    session: { ...(currentSnapshot.session ?? {}) },
+    clients: Array.isArray(currentSnapshot.clients) ? [...currentSnapshot.clients] : [],
+    latestLapResults: Array.isArray(currentSnapshot.latestLapResults) ? [...currentSnapshot.latestLapResults] : [],
+  };
+
+  const session = nextSnapshot.session;
+  const now = Date.now();
+
+  switch (path) {
+    case "/api/control/start-monitoring":
+      session.stage = "MONITORING";
+      session.monitoringActive = true;
+      session.monitoringStartedAtMs = now;
+      return nextSnapshot;
+    case "/api/control/stop-monitoring":
+      session.stage = "SETUP";
+      session.monitoringActive = false;
+      return nextSnapshot;
+    case "/api/control/reset-run":
+      session.stage = "SETUP";
+      session.monitoringActive = false;
+      session.monitoringStartedAtMs = null;
+      session.monitoringElapsedMs = 0;
+      session.hostStartSensorNanos = null;
+      session.hostStopSensorNanos = null;
+      session.hostSplitMarks = [];
+      nextSnapshot.latestLapResults = [];
+      return nextSnapshot;
+    case "/api/control/assign-role": {
+      const targetId = body?.targetId;
+      const role = body?.role;
+      if (typeof targetId === "string" && typeof role === "string") {
+        nextSnapshot.clients = nextSnapshot.clients.map((client: any) =>
+          client?.roleTarget === targetId ? { ...client, assignedRole: role } : client,
+        );
+      }
+      return nextSnapshot;
+    }
+    case "/api/control/device-config": {
+      const targetId = body?.targetId;
+      if (typeof targetId === "string") {
+        nextSnapshot.clients = nextSnapshot.clients.map((client: any) => {
+          if (client?.roleTarget !== targetId) return client;
+          return {
+            ...client,
+            ...(body?.cameraFacing ? { cameraFacing: body.cameraFacing } : {}),
+            ...(Number.isInteger(body?.sensitivity) ? { sensitivity: body.sensitivity } : {}),
+            ...(Number.isFinite(body?.distanceMeters) ? { distanceMeters: body.distanceMeters } : {}),
+          };
+        });
+      }
+      return nextSnapshot;
+    }
+    default:
+      return nextSnapshot;
+  }
+}
 
 export default function App() {
-  const [snapshot, setSnapshot] = useState(null);
-  const [wsConnected, setWsConnected] = useState(false);
+  const [snapshot, setSnapshot] = useState<any>(() => (DEV_UI_MOCK_MODE ? createDevMockSnapshot() : null));
+  const [wsConnected, setWsConnected] = useState(() => DEV_UI_MOCK_MODE);
   const [busyAction, setBusyAction] = useState("");
   const [lastError, setLastError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -41,6 +203,7 @@ export default function App() {
   const [selectedSavedFileName, setSelectedSavedFileName] = useState("");
   const [selectedSavedMeta, setSelectedSavedMeta] = useState(null);
   const [selectedSavedPayload, setSelectedSavedPayload] = useState(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [raceClockTickMs, setRaceClockTickMs] = useState(() => Date.now());
   const raceClockBaseMsRef = useRef(null);
   const raceClockAnchorRef = useRef({
@@ -53,6 +216,10 @@ export default function App() {
   async function fetchState() {
     setRefreshing(true);
     try {
+      if (DEV_UI_MOCK_MODE) {
+        setLastError("");
+        return;
+      }
       const response = await fetch("/api/state");
       if (!response.ok) throw new Error(`State request failed (${response.status})`);
       setSnapshot(await response.json());
@@ -67,6 +234,12 @@ export default function App() {
   async function postControl(path: string, body: unknown = null, actionKey = path): Promise<any> {
     setBusyAction(actionKey);
     try {
+      if (DEV_UI_MOCK_MODE) {
+        setSnapshot((previous: any) => applyDevMockControl(previous, path, body));
+        setLastError("");
+        return { ok: true, mock: true };
+      }
+
       const response = await fetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -99,6 +272,15 @@ export default function App() {
   async function fetchSavedResultsList(preferredFileName = null) {
     setSavedResultsLoading(true);
     try {
+      if (DEV_UI_MOCK_MODE) {
+        setSavedResults([]);
+        setSelectedSavedFileName("");
+        setSelectedSavedMeta(null);
+        setSelectedSavedPayload(null);
+        setLastError("");
+        return;
+      }
+
       const response = await fetch("/api/results");
       if (!response.ok) throw new Error(`Saved results request failed (${response.status})`);
       const payload = await response.json();
@@ -131,6 +313,12 @@ export default function App() {
 
     setSavedResultLoading(true);
     try {
+      if (DEV_UI_MOCK_MODE) {
+        setSelectedSavedPayload(null);
+        setLastError("");
+        return;
+      }
+
       const response = await fetch(`/api/results/${encodeURIComponent(fileName)}`);
       if (!response.ok) throw new Error(`Saved result load failed (${response.status})`);
       const payload = await response.json();
@@ -284,6 +472,10 @@ export default function App() {
   }
 
   useEffect(() => {
+    if (DEV_UI_MOCK_MODE) {
+      return;
+    }
+
     let socket;
     let disposed = false;
     let reconnectHandle;
@@ -460,13 +652,13 @@ export default function App() {
 
   const raceClockDisplay = useMemo(() => {
     if (hostStartSensorNanos === null) {
-      return "00.00";
+      return "00.00s";
     }
     if (hostStopSensorNanos !== null && hostStopSensorNanos > hostStartSensorNanos) {
       return formatDurationNanos(hostStopSensorNanos - hostStartSensorNanos);
     }
     if (!monitoringActive) {
-      return "00.00";
+      return "00.00s";
     }
 
     const baseMs = Number.isFinite(raceClockBaseMsRef.current) ? raceClockBaseMsRef.current : monitoringElapsedMs;
@@ -527,53 +719,65 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
-      <main className="flex w-full flex-col gap-4 p-2 md:p-3">
-        <header className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h1 className="text-xl font-bold">Sprint Sync Windows Coordinator</h1>
-              <p className="text-sm text-slate-600">
-                Windows auto-hosts session. Connected devices receive lobby and monitoring state from this coordinator.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                {stageLabel(stage)}
-              </span>
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                  wsConnected ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+      <main className="flex w-full flex-col md:flex-row">
+        <aside
+          className={`w-full shrink-0 border-r border-slate-200 bg-white shadow-sm transition-all duration-200 md:sticky md:top-0 md:h-screen ${
+            sidebarCollapsed ? "md:w-16" : "md:w-max"
+          }`}
+        >
+          <div className="flex items-center justify-end px-2 py-2">
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((previous) => !previous)}
+              className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+            >
+              {sidebarCollapsed ? ">>" : "<<"}
+            </button>
+          </div>
+          {!sidebarCollapsed ? (
+            <nav className="space-y-1 px-2 py-0">
+              <button
+                type="button"
+                onClick={() => setActiveTab("live")}
+                className={`flex items-center rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+                  activeTab === "live"
+                    ? "bg-blue-600 text-white"
+                    : "text-slate-700 hover:bg-slate-100"
                 }`}
               >
-                {wsConnected ? "Live" : "Reconnecting"}
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            <ActionButton
-              label="Live Monitor"
-              onClick={() => setActiveTab("live")}
-              busy={false}
-              variant="secondary"
-              active={activeTab === "live"}
-            />
-            <ActionButton
-              label={`Saved Results (${savedResults.length})`}
-              onClick={() => {
-                setActiveTab("saved");
-                fetchSavedResultsList();
-              }}
-              busy={savedResultsLoading}
-              variant="secondary"
-              active={activeTab === "saved"}
-            />
-          </div>
-
-          {lastError ? (
-            <p className="mt-3 rounded-md bg-rose-100 px-3 py-2 text-sm text-rose-700">{lastError}</p>
+                <span>Live Monitor</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("saved");
+                  fetchSavedResultsList();
+                }}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+                  activeTab === "saved"
+                    ? "bg-blue-600 text-white"
+                    : "text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                <span>Saved Results</span>
+                {activeTab === "saved" ? (
+                  <span
+                    className={`inline-flex min-w-6 items-center justify-center rounded-full px-1.5 py-0.5 text-xs ${
+                      activeTab === "saved" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {savedResults.length}
+                  </span>
+                ) : null}
+              </button>
+            </nav>
           ) : null}
-        </header>
+        </aside>
+
+        <section className="flex-1 space-y-4 p-2 md:p-3">
+          {lastError ? (
+            <p className="rounded-md bg-rose-100 px-3 py-2 text-sm text-rose-700">{lastError}</p>
+          ) : null}
 
         {activeTab === "saved" ? (
           <SavedResultsPanel
@@ -712,7 +916,7 @@ export default function App() {
                         <tr>
                           <th className="pb-2 pr-3">Distance</th>
                           <th className="pb-2 pr-3">Time</th>
-                          <th className="pb-2 pr-3">Speed ({speedUnit === "kmh" ? "km/h" : "m/s"})</th>
+                          <th className="pb-2 pr-3">Speed</th>
                           <th className="pb-2">Acceleration (m/s^2)</th>
                         </tr>
                       </thead>
@@ -726,7 +930,7 @@ export default function App() {
                                 <button
                                   type="button"
                                   onClick={toggleSpeedUnit}
-                                  className="font-mono underline decoration-dotted underline-offset-2"
+                                  className="font-mono"
                                 >
                                   {formatSpeedWithUnit(pointSpeedMps, speedUnit)}
                                 </button>
@@ -796,6 +1000,7 @@ export default function App() {
             </details>
           </>
         )}
+        </section>
       </main>
     </div>
   );

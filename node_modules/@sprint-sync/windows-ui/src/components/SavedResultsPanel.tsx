@@ -123,7 +123,7 @@ export default function SavedResultsPanel({
                       <tr>
                         <th className="pb-2 pr-3">Distance</th>
                         <th className="pb-2 pr-3">Time</th>
-                        <th className="pb-2 pr-3">Speed ({speedUnit === "kmh" ? "km/h" : "m/s"})</th>
+                        <th className="pb-2 pr-3">Speed</th>
                         <th className="pb-2">Acceleration (m/s^2)</th>
                       </tr>
                     </thead>
@@ -137,7 +137,7 @@ export default function SavedResultsPanel({
                               <button
                                 type="button"
                                 onClick={toggleSpeedUnit}
-                                className="font-mono underline decoration-dotted underline-offset-2"
+                                className="font-mono"
                               >
                                 {formatSpeedWithUnit(pointSpeedMps, speedUnit)}
                               </button>

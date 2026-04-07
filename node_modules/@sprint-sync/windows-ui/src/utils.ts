@@ -15,26 +15,26 @@ export function formatDurationNanos(nanos: number): string {
   const seconds = Math.floor((centiseconds % 6_000) / 100);
   const cs = centiseconds % 100;
   if (minutes > 0) {
-    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(cs).padStart(2, "0")}s`;
   }
-  return `${String(seconds).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
+  return `${String(seconds).padStart(2, "0")}.${String(cs).padStart(2, "0")}s`;
 }
 
 export function formatRaceClockMs(ms: number): string {
-  if (!Number.isFinite(ms) || ms < 0) return "00.00";
+  if (!Number.isFinite(ms) || ms < 0) return "00.00s";
   const centiseconds = Math.floor(ms / 10);
   const minutes = Math.floor(centiseconds / 6_000);
   const seconds = Math.floor((centiseconds % 6_000) / 100);
   const cs = centiseconds % 100;
   if (minutes > 0) {
-    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(cs).padStart(2, "0")}s`;
   }
-  return `${String(seconds).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
+  return `${String(seconds).padStart(2, "0")}.${String(cs).padStart(2, "0")}s`;
 }
 
 export function formatMeters(distanceMeters: number): string {
   if (!Number.isFinite(distanceMeters) || distanceMeters < 0) return "-";
-  return `${distanceMeters.toFixed(2)} m`;
+  return `${Math.round(distanceMeters)}m`;
 }
 
 export function formatSpeedWithUnit(speedMps: number, speedUnit = "kmh"): string {

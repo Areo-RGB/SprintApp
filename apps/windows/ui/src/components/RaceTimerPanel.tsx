@@ -31,7 +31,7 @@ export default function RaceTimerPanel({
       <div className="space-y-5">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Race Timer</p>
-          <p className="mt-2 font-mono text-5xl font-bold leading-none md:text-7xl">{raceClockDisplay}</p>
+          <p className="mt-2 font-mono text-6xl font-bold leading-none md:text-8xl">{raceClockDisplay}</p>
           <p className="mt-3 text-sm text-slate-300">
             {timerStateLabel} · Start {hostStartSensorNanos !== null ? "set" : "pending"} · Splits {hostSplitMarks.length}/4 · Stop{" "}
             {hostStopSensorNanos !== null ? "set" : "pending"}
@@ -45,101 +45,71 @@ export default function RaceTimerPanel({
               Waiting for split/finish results...
             </div>
           ) : (
-            <div className="mt-3 space-y-3">
+            <div className="mt-3 flex gap-3 overflow-x-auto pb-1">
               {monitoringPointRows.map(({ lap, pointSpeedMps, accelerationMps2 }, index) => {
                 const checkpointLabel = lap.roleLabel ?? lap.senderDeviceName ?? `Checkpoint ${index + 1}`;
                 const isLatest = index === monitoringPointRows.length - 1;
+                const speedDisplay = formatSpeedWithUnit(pointSpeedMps, speedUnit);
+                const [speedValue, speedUnitLabel] = speedDisplay.split(" ");
+                const accelerationDisplay = formatAcceleration(accelerationMps2);
+                const [accelerationValue, accelerationUnitLabel] = accelerationDisplay.split(" ");
 
                 return (
                   <div
                     key={`timer-result-${lap.id ?? `${checkpointLabel}-${index}-${lap.elapsedNanos}`}`}
-                    className={`rounded-lg border px-4 py-4 ${
-                      isLatest ? "border-amber-300 bg-amber-50/95 text-slate-900" : "border-slate-600 bg-slate-800/70 text-white"
-                    }`}
+                    className="min-w-[360px] flex-1 rounded-lg border border-slate-600 bg-slate-800/70 px-4 py-4 text-white"
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <p
-                        className={`text-sm font-semibold uppercase tracking-[0.16em] ${
-                          isLatest ? "text-amber-800" : "text-slate-300"
-                        }`}
-                      >
+                      <p className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-300">
                         {checkpointLabel}
                       </p>
                       {isLatest ? (
-                        <span className="rounded-full border border-amber-400 bg-amber-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-amber-800">
+                        <span className="rounded-full border border-slate-500 bg-slate-700 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-100">
                           Latest
                         </span>
                       ) : null}
                     </div>
 
-                    <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
-                        <p
-                          className={`text-xs font-semibold uppercase tracking-[0.18em] ${
-                            isLatest ? "text-amber-700" : "text-slate-400"
-                          }`}
-                        >
-                          Distance
-                        </p>
-                        <p
-                          className={`mt-2 font-mono font-black leading-none ${
-                            isLatest ? "text-6xl text-slate-950 md:text-7xl" : "text-5xl text-white md:text-6xl"
-                          }`}
-                        >
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Distance</p>
+                        <p className="mt-2 font-mono text-4xl font-black leading-none text-white md:text-5xl">
                           {formatMeters(lap.distanceMeters)}
                         </p>
                       </div>
 
                       <div>
-                        <p
-                          className={`text-xs font-semibold uppercase tracking-[0.18em] ${
-                            isLatest ? "text-amber-700" : "text-slate-400"
-                          }`}
-                        >
-                          Time
-                        </p>
-                        <p
-                          className={`mt-2 font-mono font-black leading-none ${
-                            isLatest ? "text-6xl text-slate-950 md:text-7xl" : "text-5xl text-white md:text-6xl"
-                          }`}
-                        >
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Time</p>
+                        <p className="mt-2 font-mono text-4xl font-black leading-none text-white md:text-5xl">
                           {formatDurationNanos(lap.elapsedNanos)}
                         </p>
                       </div>
+                    </div>
 
+                    <div className="my-4 border-t border-slate-600" />
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
-                        <p
-                          className={`text-xs font-semibold uppercase tracking-[0.18em] ${
-                            isLatest ? "text-amber-700" : "text-slate-400"
-                          }`}
-                        >
-                          Speed ({speedUnit === "kmh" ? "km/h" : "m/s"})
-                        </p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Speed</p>
                         <button
                           type="button"
                           onClick={toggleSpeedUnit}
-                          className={`mt-2 font-mono text-3xl font-bold leading-none underline decoration-dotted underline-offset-2 ${
-                            isLatest ? "text-slate-900" : "text-white"
-                          }`}
+                          className="mt-2 inline-flex items-baseline gap-1.5 font-mono leading-none"
                         >
-                          {formatSpeedWithUnit(pointSpeedMps, speedUnit)}
+                          <span className="text-2xl font-bold text-white">{speedValue}</span>
+                          {speedUnitLabel ? (
+                            <span className="text-base font-semibold text-slate-400">{speedUnitLabel}</span>
+                          ) : null}
                         </button>
                       </div>
 
                       <div>
-                        <p
-                          className={`text-xs font-semibold uppercase tracking-[0.18em] ${
-                            isLatest ? "text-amber-700" : "text-slate-400"
-                          }`}
-                        >
-                          Acceleration
-                        </p>
-                        <p
-                          className={`mt-2 font-mono text-3xl font-bold leading-none ${
-                            isLatest ? "text-slate-900" : "text-white"
-                          }`}
-                        >
-                          {formatAcceleration(accelerationMps2)}
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Acceleration</p>
+                        <p className="mt-2 inline-flex items-baseline gap-1.5 font-mono leading-none">
+                          <span className="text-2xl font-bold text-white">{accelerationValue}</span>
+                          {accelerationUnitLabel ? (
+                            <span className="text-base font-semibold text-slate-400">{accelerationUnitLabel}</span>
+                          ) : null}
                         </p>
                       </div>
                     </div>

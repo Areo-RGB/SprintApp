@@ -19,6 +19,13 @@
     "idea":{
       "url":"http://127.0.0.1:64342/sse",
       "headers": {}
+    },
+    "CodeGraphContext": {
+      "command": "/home/paul/.local/bin/cgc",
+      "args": [
+        "mcp",
+        "start"
+      ]
     }
   }
 }
