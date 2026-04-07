@@ -1,0 +1,43 @@
+{
+  "name": "sprint-sync-monorepo",
+  "private": true,
+  "packageManager": "pnpm@10.30.1",
+  "workspaces": [
+    "apps/windows/backend",
+    "apps/windows/ui",
+    "apps/windows/desktop-tauri"
+  ],
+  "scripts": {
+    "build:debug:apk": "cmd.exe /c \"cd /d C:\\Users\\paul\\projects\\photo-finish-tcp-device-apks\\apps\\android && gradlew.bat :app:assembleDebug\"",
+    "build:release:apk": "cmd.exe /c \"cd /d C:\\Users\\paul\\projects\\photo-finish-tcp-device-apks\\apps\\android && gradlew.bat :app:assembleRelease\"",
+    "rebuild:debug:devices": "npm run build:debug:apk && node scripts/install-debug-apk.mjs",
+    "install:debug:devices:adb": "node scripts/install-debug-devices-adb.mjs",
+    "rebuild:debug:devices:adb": "npm run build:debug:apk && npm run install:debug:devices:adb",
+    "build:debug:device-flavors": "npm run build:debug:apk",
+    "install:debug:device-flavors:adb": "npm run install:debug:devices:adb",
+    "rebuild:debug:device-flavors:adb": "npm run rebuild:debug:devices:adb",
+    "install:release:devices": "node scripts/install-release-apk.mjs",
+    "rebuild:release:devices": "npm run build:release:apk && node scripts/install-release-apk.mjs",
+    "install:debug:devices:build": "npm run rebuild:debug:devices",
+    "android:build:install:start": "npm run rebuild:debug:devices:adb",
+    "windows:install": "npm install --workspaces --include-workspace-root",
+    "windows:dev": "concurrently \"npm run dev --workspace @sprint-sync/windows-backend\" \"npm run dev --workspace @sprint-sync/windows-ui\"",
+    "windows:start:all": "npm run windows:dev",
+    "windows:dev:backend": "npm run dev --workspace @sprint-sync/windows-backend",
+    "windows:dev:ui": "npm run dev --workspace @sprint-sync/windows-ui",
+    "windows:build": "npm run build --workspace @sprint-sync/windows-ui && npm run build --workspace @sprint-sync/windows-backend",
+    "windows:start": "npm run start --workspace @sprint-sync/windows-backend",
+    "windows:preview:ui": "npm run preview --workspace @sprint-sync/windows-ui",
+    "windows:package:backend": "npm install --include=optional && npm run build --workspace @sprint-sync/windows-ui && npm run package --workspace @sprint-sync/windows-backend",
+    "windows:package:backend:exe": "npm run windows:package:backend",
+    "windows:package:desktop": "npm run windows:package:backend && npm run build --workspace @sprint-sync/windows-desktop-tauri",
+    "windows:package:desktop:build-tools": "cmd.exe /c \"\\\"C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat\\\" && npm run windows:package:desktop\"",
+    "windows:package:desktop:legacy": "npm run windows:package:backend && py -3 -m pip install -r apps/windows/desktop/requirements.txt && py -3 apps/windows/desktop/build.py",
+    "windows:package:exe": "npm run windows:package:desktop",
+    "windows:package:start:exe": "npm run windows:package:desktop && cmd.exe /c start \"\" \"%cd%\\apps\\windows\\desktop-tauri\\src-tauri\\target\\release\\sprint-sync-windows-desktop-tauri.exe\"",
+    "run:android-and-exe": "npm run rebuild:debug:devices:adb && npm run windows:package:start:exe"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

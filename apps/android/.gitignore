@@ -1,0 +1,18 @@
+/.gradle
+/captures/
+/local.properties
+GeneratedPluginRegistrant.java
+.cxx/
+/.idea/
+/.codex/
+/build/
+**/build/
+*.log
+compile_log.txt
+gradle_tasks.txt
+
+# Remember to never publicly share your keystore.
+# See Android app signing guidance in the Android developer docs.
+key.properties
+**/*.keystore
+**/*.jks

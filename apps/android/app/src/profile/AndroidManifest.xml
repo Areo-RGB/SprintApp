@@ -1,0 +1,4 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- INTERNET is enabled in profile builds for development diagnostics. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+</manifest>
