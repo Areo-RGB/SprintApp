@@ -32,7 +32,6 @@
     "windows:package:backend:exe": "npm run windows:package:backend",
     "windows:package:desktop": "npm run windows:package:backend && npm run build --workspace @sprint-sync/windows-desktop-tauri",
     "windows:package:desktop:build-tools": "cmd.exe /c \"\\\"C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat\\\" && npm run windows:package:desktop\"",
-    "windows:package:desktop:legacy": "npm run windows:package:backend && py -3 -m pip install -r apps/windows/desktop/requirements.txt && py -3 apps/windows/desktop/build.py",
     "windows:package:exe": "npm run windows:package:desktop",
     "windows:package:start:exe": "npm run windows:package:desktop && cmd.exe /c start \"\" \"%cd%\\apps\\windows\\desktop-tauri\\src-tauri\\target\\release\\sprint-sync-windows-desktop-tauri.exe\"",
     "run:android-and-exe": "npm run rebuild:debug:devices:adb && npm run windows:package:start:exe"
