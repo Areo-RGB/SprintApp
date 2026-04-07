@@ -50,7 +50,7 @@ class SessionTrigger : Table() {
             return if(o != 0) bb.getLong(o + bb_pos) else 0L
         }
     companion object {
-        fun validateVersion() = Constants.FLATBUFFERS_23_5_26()
+        fun validateVersion() = Constants.FLATBUFFERS_25_2_10()
         fun getRootAsSessionTrigger(_bb: ByteBuffer): SessionTrigger = getRootAsSessionTrigger(_bb, SessionTrigger())
         fun getRootAsSessionTrigger(_bb: ByteBuffer, obj: SessionTrigger): SessionTrigger {
             _bb.order(ByteOrder.LITTLE_ENDIAN)

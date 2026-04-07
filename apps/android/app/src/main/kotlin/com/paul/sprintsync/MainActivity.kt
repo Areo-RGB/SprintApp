@@ -39,6 +39,7 @@ import com.paul.sprintsync.features.race_session.SessionOperatingMode
 import com.paul.sprintsync.features.race_session.SessionAnchorState
 import com.paul.sprintsync.features.race_session.SessionSplitMark
 import com.paul.sprintsync.features.race_session.SessionStage
+import com.paul.sprintsync.features.race_session.TelemetryEnvelopeFlatBufferCodec
 import com.paul.sprintsync.features.race_session.explicitSplitRoles
 import com.paul.sprintsync.features.race_session.isSplitCheckpointRole
 import com.paul.sprintsync.features.race_session.splitIndexForRole
@@ -1309,7 +1310,7 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
 
                 if (hostEndpoint != null) {
                     // Connected - send immediately
-                    connectionsManager.sendMessage(hostEndpoint, lapMessage.toJsonString()) { result ->
+                    sendLapResultToHost(hostEndpoint, lapMessage) { result ->
                         result.exceptionOrNull()?.let { error ->
                             appendEvent("lap relay error: ${error.localizedMessage ?: "unknown"}")
                         }
@@ -1788,12 +1789,28 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
         }
     }
 
+    private fun sendLapResultToHost(
+        hostEndpoint: String,
+        lapMessage: SessionLapResultMessage,
+        onComplete: (Result<Unit>) -> Unit,
+    ) {
+        if (raceSessionController.isBinaryTelemetryEnabled()) {
+            connectionsManager.sendTelemetryPayload(
+                hostEndpoint,
+                TelemetryEnvelopeFlatBufferCodec.encodeLapResult(lapMessage),
+                onComplete,
+            )
+        } else {
+            connectionsManager.sendMessage(hostEndpoint, lapMessage.toJsonString(), onComplete)
+        }
+    }
+
     private fun flushPendingLapResults() {
         val hostEndpoint = displayConnectedHostEndpointId ?: return
 
         while (pendingLapResults.isNotEmpty()) {
             val lapMessage = pendingLapResults.removeFirst()
-            connectionsManager.sendMessage(hostEndpoint, lapMessage.toJsonString()) { result ->
+            sendLapResultToHost(hostEndpoint, lapMessage) { result ->
                 if (result.isFailure) {
                     // Re-queue at front if send fails, will retry on next flush
                     pendingLapResults.addFirst(lapMessage)

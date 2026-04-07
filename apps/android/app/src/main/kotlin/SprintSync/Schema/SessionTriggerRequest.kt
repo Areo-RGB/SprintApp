@@ -65,7 +65,7 @@ class SessionTriggerRequest : Table() {
             return if(o != 0) bb.getLong(o + bb_pos) else -1L
         }
     companion object {
-        fun validateVersion() = Constants.FLATBUFFERS_23_5_26()
+        fun validateVersion() = Constants.FLATBUFFERS_25_2_10()
         fun getRootAsSessionTriggerRequest(_bb: ByteBuffer): SessionTriggerRequest = getRootAsSessionTriggerRequest(_bb, SessionTriggerRequest())
         fun getRootAsSessionTriggerRequest(_bb: ByteBuffer, obj: SessionTriggerRequest): SessionTriggerRequest {
             _bb.order(ByteOrder.LITTLE_ENDIAN)

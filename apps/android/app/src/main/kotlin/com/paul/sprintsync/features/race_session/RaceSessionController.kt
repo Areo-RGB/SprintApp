@@ -1200,6 +1200,10 @@ class RaceSessionController(
         return hasFreshClockLock()
     }
 
+    fun isBinaryTelemetryEnabled(): Boolean {
+        return enableBinaryTelemetry
+    }
+
     private fun currentHostMinusClientElapsedNanos(): Long? {
         return _clockState.value.hostMinusClientElapsedNanos
     }
@@ -1264,7 +1268,31 @@ class RaceSessionController(
                 ingestTimelineSnapshot(payload.message)
             }
 
+            is DecodedTelemetryEnvelope.Snapshot -> {
+                _uiState.value = _uiState.value.copy(lastEvent = "telemetry_payload_received")
+                applySnapshot(payload.message)
+            }
+
+            is DecodedTelemetryEnvelope.TriggerRefinementEnvelope -> {
+                _uiState.value = _uiState.value.copy(lastEvent = "telemetry_payload_received")
+                applyIncomingTriggerRefinement(payload.message)
+            }
+
+            is DecodedTelemetryEnvelope.ConfigUpdate -> {
+                _uiState.value = _uiState.value.copy(lastEvent = "telemetry_payload_received")
+                handleRemoteConfigUpdate(payload.message)
+            }
+
+            is DecodedTelemetryEnvelope.ClockResync -> {
+                _uiState.value = _uiState.value.copy(lastEvent = "telemetry_payload_received")
+                handleClockResyncRequest(endpointId, payload.message)
+            }
+
             null -> {
+                _uiState.value = _uiState.value.copy(lastEvent = "telemetry_payload_dropped")
+            }
+
+            else -> {
                 _uiState.value = _uiState.value.copy(lastEvent = "telemetry_payload_dropped")
             }
         }
@@ -1317,6 +1345,66 @@ class RaceSessionController(
             triggerSensorNanos = triggerSensorNanos,
             broadcast = false,
         )
+    }
+
+    private fun applyIncomingTriggerRefinement(message: SessionTriggerRefinementMessage) {
+        if (_uiState.value.runId != message.runId) {
+            return
+        }
+
+        val mappedProvisional = if (_uiState.value.networkRole == SessionNetworkRole.CLIENT) {
+            mapHostSensorToLocalSensor(message.provisionalHostSensorNanos) ?: return
+        } else {
+            message.provisionalHostSensorNanos
+        }
+        val mappedRefined = if (_uiState.value.networkRole == SessionNetworkRole.CLIENT) {
+            mapHostSensorToLocalSensor(message.refinedHostSensorNanos) ?: return
+        } else {
+            message.refinedHostSensorNanos
+        }
+
+        val currentTimeline = _uiState.value.timeline
+        val nextTimeline = when (message.role) {
+            SessionDeviceRole.START -> {
+                if (currentTimeline.hostStartSensorNanos != mappedProvisional) {
+                    return
+                }
+                currentTimeline.copy(hostStartSensorNanos = mappedRefined)
+            }
+
+            SessionDeviceRole.STOP -> {
+                if (currentTimeline.hostStopSensorNanos != mappedProvisional) {
+                    return
+                }
+                currentTimeline.copy(hostStopSensorNanos = mappedRefined)
+            }
+
+            SessionDeviceRole.SPLIT1,
+            SessionDeviceRole.SPLIT2,
+            SessionDeviceRole.SPLIT3,
+            SessionDeviceRole.SPLIT4,
+            -> {
+                val updatedMarks = currentTimeline.hostSplitMarks.map { splitMark ->
+                    if (splitMark.role == message.role && splitMark.hostSensorNanos == mappedProvisional) {
+                        splitMark.copy(hostSensorNanos = mappedRefined)
+                    } else {
+                        splitMark
+                    }
+                }
+                if (updatedMarks == currentTimeline.hostSplitMarks) {
+                    return
+                }
+                currentTimeline.copy(hostSplitMarks = updatedMarks)
+            }
+
+            else -> return
+        }
+
+        _uiState.value = _uiState.value.copy(
+            timeline = nextTimeline,
+            lastEvent = "trigger_refinement_applied",
+        )
+        maybePersistCompletedRun(nextTimeline)
     }
 
     private fun handleConnectionResult(event: SessionConnectionEvent.ConnectionResult) {
@@ -1833,15 +1921,25 @@ class RaceSessionController(
     }
 
     private fun sendIdentityHandshake(endpointId: String) {
-        val payload = SessionDeviceIdentityMessage(
+        val message = SessionDeviceIdentityMessage(
             stableDeviceId = localDeviceId,
             deviceName = localDeviceName(),
-        ).toJsonString()
-        sendMessage(endpointId, payload) { result ->
-            result.exceptionOrNull()?.let { error ->
-                _uiState.value = _uiState.value.copy(
-                    lastError = "identity send failed ($endpointId): ${error.localizedMessage ?: "unknown"}",
-                )
+        )
+        if (enableBinaryTelemetry) {
+            sendTelemetryPayload(endpointId, TelemetryEnvelopeFlatBufferCodec.encodeDeviceIdentity(message)) { result ->
+                result.exceptionOrNull()?.let { error ->
+                    _uiState.value = _uiState.value.copy(
+                        lastError = "identity send failed ($endpointId): ${error.localizedMessage ?: "unknown"}",
+                    )
+                }
+            }
+        } else {
+            sendMessage(endpointId, message.toJsonString()) { result ->
+                result.exceptionOrNull()?.let { error ->
+                    _uiState.value = _uiState.value.copy(
+                        lastError = "identity send failed ($endpointId): ${error.localizedMessage ?: "unknown"}",
+                    )
+                }
             }
         }
     }
@@ -1988,11 +2086,21 @@ class RaceSessionController(
         if (!force && fingerprint == lastPublishedTelemetryFingerprint) {
             return
         }
-        sendMessage(hostEndpointId, message.toJsonString()) { result ->
-            result.exceptionOrNull()?.let { error ->
-                _uiState.value = _uiState.value.copy(
-                    lastError = "telemetry send failed: ${error.localizedMessage ?: "unknown"}",
-                )
+        if (enableBinaryTelemetry) {
+            sendTelemetryPayload(hostEndpointId, TelemetryEnvelopeFlatBufferCodec.encodeDeviceTelemetry(message)) { result ->
+                result.exceptionOrNull()?.let { error ->
+                    _uiState.value = _uiState.value.copy(
+                        lastError = "telemetry send failed: ${error.localizedMessage ?: "unknown"}",
+                    )
+                }
+            }
+        } else {
+            sendMessage(hostEndpointId, message.toJsonString()) { result ->
+                result.exceptionOrNull()?.let { error ->
+                    _uiState.value = _uiState.value.copy(
+                        lastError = "telemetry send failed: ${error.localizedMessage ?: "unknown"}",
+                    )
+                }
             }
         }
         lastPublishedTelemetryFingerprint = fingerprint

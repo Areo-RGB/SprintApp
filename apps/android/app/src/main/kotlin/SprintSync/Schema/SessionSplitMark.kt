@@ -39,7 +39,7 @@ class SessionSplitMark : Table() {
             return if(o != 0) bb.getLong(o + bb_pos) else 0L
         }
     companion object {
-        fun validateVersion() = Constants.FLATBUFFERS_23_5_26()
+        fun validateVersion() = Constants.FLATBUFFERS_25_2_10()
         fun getRootAsSessionSplitMark(_bb: ByteBuffer): SessionSplitMark = getRootAsSessionSplitMark(_bb, SessionSplitMark())
         fun getRootAsSessionSplitMark(_bb: ByteBuffer, obj: SessionSplitMark): SessionSplitMark {
             _bb.order(ByteOrder.LITTLE_ENDIAN)

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -14,8 +15,11 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.13",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.5.2",
     "tailwindcss": "^4.1.13",
+    "typescript": "^5.9.3",
     "vite": "^5.4.21"
   },
   "optionalDependencies": {

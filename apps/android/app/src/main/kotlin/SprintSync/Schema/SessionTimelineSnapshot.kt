@@ -57,7 +57,7 @@ class SessionTimelineSnapshot : Table() {
             return if(o != 0) bb.getLong(o + bb_pos) else 0L
         }
     companion object {
-        fun validateVersion() = Constants.FLATBUFFERS_23_5_26()
+        fun validateVersion() = Constants.FLATBUFFERS_25_2_10()
         fun getRootAsSessionTimelineSnapshot(_bb: ByteBuffer): SessionTimelineSnapshot = getRootAsSessionTimelineSnapshot(_bb, SessionTimelineSnapshot())
         fun getRootAsSessionTimelineSnapshot(_bb: ByteBuffer, obj: SessionTimelineSnapshot): SessionTimelineSnapshot {
             _bb.order(ByteOrder.LITTLE_ENDIAN)

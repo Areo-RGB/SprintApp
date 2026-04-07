@@ -1506,11 +1506,63 @@ class RaceSessionControllerTest {
             broadcast = true,
         )
 
-        assertEquals(2, sentTelemetryPayloads.size)
+        assertEquals(3, sentTelemetryPayloads.size)
 
-        val firstPayload = TelemetryEnvelopeFlatBufferCodec.decode(sentTelemetryPayloads[0])
-        val secondPayload = TelemetryEnvelopeFlatBufferCodec.decode(sentTelemetryPayloads[1])
-        assertTrue(firstPayload is DecodedTelemetryEnvelope.Trigger)
-        assertTrue(secondPayload is DecodedTelemetryEnvelope.TimelineSnapshot)
+        val decodedPayloads = sentTelemetryPayloads.mapNotNull(TelemetryEnvelopeFlatBufferCodec::decode)
+        assertTrue(decodedPayloads.any { it is DecodedTelemetryEnvelope.Identity })
+        assertTrue(decodedPayloads.any { it is DecodedTelemetryEnvelope.Trigger })
+        assertTrue(decodedPayloads.any { it is DecodedTelemetryEnvelope.TimelineSnapshot })
+    }
+
+    @Test
+    fun `binary telemetry mode sends identity and device telemetry envelopes when client connects`() {
+        val sentMessages = mutableListOf<String>()
+        val sentTelemetryPayloads = mutableListOf<ByteArray>()
+
+        val controller = RaceSessionController(
+            loadLastRun = { null },
+            saveLastRun = { },
+            sendMessage = { _, message, onComplete ->
+                sentMessages += message
+                onComplete(Result.success(Unit))
+            },
+            sendClockSyncPayload = { _, _, onComplete -> onComplete(Result.success(Unit)) },
+            sendTelemetryPayload = { _, payloadBytes, onComplete ->
+                sentTelemetryPayloads += payloadBytes
+                onComplete(Result.success(Unit))
+            },
+            enableBinaryTelemetry = true,
+            ioDispatcher = Dispatchers.Unconfined,
+            nowElapsedNanos = { 25_000L },
+            clockSyncDelay = { _ -> },
+        )
+
+        controller.setNetworkRole(SessionNetworkRole.CLIENT)
+        controller.setLocalDeviceIdentity("stable-local", "Pixel Local")
+        controller.onConnectionEvent(
+            SessionConnectionEvent.ConnectionResult(
+                endpointId = "host-ep",
+                endpointName = "host",
+                connected = true,
+                statusCode = 0,
+                statusMessage = null,
+            ),
+        )
+
+        assertTrue(sentMessages.isEmpty())
+        assertTrue(sentTelemetryPayloads.isNotEmpty())
+
+        val decodedPayloads = sentTelemetryPayloads.mapNotNull(TelemetryEnvelopeFlatBufferCodec::decode)
+        assertTrue(decodedPayloads.any { it is DecodedTelemetryEnvelope.Identity })
+        assertTrue(decodedPayloads.any { it is DecodedTelemetryEnvelope.DeviceTelemetryEnvelope })
+
+        val beforeTelemetryCount = sentTelemetryPayloads.size
+        controller.onLocalSensitivityChanged(55)
+        assertTrue(sentTelemetryPayloads.size > beforeTelemetryCount)
+
+        val latestPayload = TelemetryEnvelopeFlatBufferCodec.decode(sentTelemetryPayloads.last())
+        val telemetryPayload = latestPayload as? DecodedTelemetryEnvelope.DeviceTelemetryEnvelope
+        assertNotNull(telemetryPayload)
+        assertEquals(55, telemetryPayload!!.message.sensitivity)
     }
 }

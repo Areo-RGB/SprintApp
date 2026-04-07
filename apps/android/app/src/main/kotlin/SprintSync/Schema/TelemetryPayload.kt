@@ -9,5 +9,12 @@ class TelemetryPayload private constructor() {
         const val SessionTriggerRequest: UByte = 1u
         const val SessionTrigger: UByte = 2u
         const val SessionTimelineSnapshot: UByte = 3u
+        const val SessionSnapshot: UByte = 4u
+        const val TriggerRefinement: UByte = 5u
+        const val DeviceConfigUpdate: UByte = 6u
+        const val ClockResyncRequest: UByte = 7u
+        const val DeviceIdentity: UByte = 8u
+        const val DeviceTelemetry: UByte = 9u
+        const val LapResult: UByte = 10u
     }
 }

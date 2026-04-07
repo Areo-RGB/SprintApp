@@ -7,7 +7,21 @@ import { fileURLToPath } from "node:url";
 
 import cors from "cors";
 import express from "express";
+import * as flatbuffers from "flatbuffers";
 import { WebSocketServer } from "ws";
+import {
+  ClockResyncRequest as FlatBufferClockResyncRequest,
+  DeviceConfigUpdate as FlatBufferDeviceConfigUpdate,
+  SessionDeviceRole as FlatBufferSessionDeviceRole,
+  SessionSnapshot as FlatBufferSessionSnapshot,
+  SessionSnapshotDevice as FlatBufferSessionSnapshotDevice,
+  SessionSplitMark as FlatBufferSessionSplitMark,
+  SessionTimelineSnapshot as FlatBufferSessionTimelineSnapshot,
+  SessionTrigger as FlatBufferSessionTrigger,
+  TelemetryEnvelope as FlatBufferTelemetryEnvelope,
+  TelemetryPayload as FlatBufferTelemetryPayload,
+  TriggerRefinement as FlatBufferTriggerRefinement,
+} from "./schema/sprint-sync/schema.js";
 import type {
   CameraFacing,
   EventLevel,
@@ -19,7 +33,6 @@ import type {
   LapResult,
   MessageStats,
   RoleLabel,
-  SavedResultSummary,
   ServerEvent,
   SessionState,
   SocketContext,
@@ -27,6 +40,19 @@ import type {
   TimelineLapResult,
   TriggerSpec,
 } from "./types.js";
+import {
+  computeProgressiveRoleOptions,
+  formatDateForResultName,
+  normalizeAthleteNameForResult,
+  ROLE_ORDER,
+  roleOrderIndex,
+} from "../../shared/src/sessionShared.js";
+import {
+  isSafeSavedResultsFileName,
+  listSavedResultItems,
+  loadSavedResultsFile,
+  sanitizeFileNameSegment,
+} from "./results.js";
 
 type UnknownRecord = Record<string, unknown>;
 type TriggerRoleLabel = Exclude<RoleLabel, "Unassigned">;
@@ -91,23 +117,35 @@ interface TelemetryTimelineSnapshotMessage {
   sentElapsedNanos: number;
 }
 
+interface TelemetryDeviceIdentityMessage {
+  stableDeviceId: string;
+  deviceName: string;
+}
+
+interface TelemetryDeviceTelemetryMessage {
+  stableDeviceId: string;
+  role: string;
+  sensitivity: number;
+  latencyMs: number | null;
+  clockSynced: boolean;
+  analysisWidth: number | null;
+  analysisHeight: number | null;
+  timestampMillis: number;
+}
+
+interface TelemetryLapResultMessage {
+  senderDeviceName: string;
+  startedSensorNanos: number;
+  stoppedSensorNanos: number;
+}
+
 type TelemetryEnvelopeDecoded =
   | { type: "trigger_request"; message: TelemetryTriggerRequestMessage }
   | { type: "session_trigger"; message: TelemetrySessionTriggerMessage }
-  | { type: "timeline_snapshot"; message: TelemetryTimelineSnapshotMessage };
-
-interface SavedResultLapLike {
-  elapsedNanos?: unknown;
-}
-
-interface SavedResultsFilePayload {
-  resultName?: unknown;
-  athleteName?: unknown;
-  notes?: unknown;
-  runId?: unknown;
-  exportedAtIso?: unknown;
-  latestLapResults?: SavedResultLapLike[];
-}
+  | { type: "timeline_snapshot"; message: TelemetryTimelineSnapshotMessage }
+  | { type: "device_identity"; message: TelemetryDeviceIdentityMessage }
+  | { type: "device_telemetry"; message: TelemetryDeviceTelemetryMessage }
+  | { type: "lap_result"; message: TelemetryLapResultMessage };
 
 const FRAME_KIND_MESSAGE = 1;
 const FRAME_KIND_BINARY = 2;
@@ -128,6 +166,13 @@ const CLOCK_RESYNC_RETRY_DELAY_MS = 1_200;
 const TELEMETRY_PAYLOAD_SESSION_TRIGGER_REQUEST = 1;
 const TELEMETRY_PAYLOAD_SESSION_TRIGGER = 2;
 const TELEMETRY_PAYLOAD_SESSION_TIMELINE_SNAPSHOT = 3;
+const TELEMETRY_PAYLOAD_SESSION_SNAPSHOT = 4;
+const TELEMETRY_PAYLOAD_TRIGGER_REFINEMENT = 5;
+const TELEMETRY_PAYLOAD_DEVICE_CONFIG_UPDATE = 6;
+const TELEMETRY_PAYLOAD_CLOCK_RESYNC_REQUEST = 7;
+const TELEMETRY_PAYLOAD_DEVICE_IDENTITY = 8;
+const TELEMETRY_PAYLOAD_DEVICE_TELEMETRY = 9;
+const TELEMETRY_PAYLOAD_LAP_RESULT = 10;
 const TELEMETRY_MISSING_OPTIONAL_LONG = -1n;
 const TELEMETRY_MISSING_OPTIONAL_INT = -1;
 const MAX_SAFE_INT64 = BigInt(Number.MAX_SAFE_INTEGER);
@@ -139,16 +184,6 @@ const HISTORY_LIMIT = 1000;
 const SESSION_STAGE_SETUP = "SETUP";
 const SESSION_STAGE_LOBBY = "LOBBY";
 const SESSION_STAGE_MONITORING = "MONITORING";
-
-const ROLE_ORDER: RoleLabel[] = [
-  "Unassigned",
-  "Start",
-  "Split 1",
-  "Split 2",
-  "Split 3",
-  "Split 4",
-  "Stop",
-];
 
 const SPLIT_ROLE_OPTIONS: RoleLabel[] = ["Split 1", "Split 2", "Split 3", "Split 4"];
 const AUTO_ASSIGN_ROLE_SEQUENCE: RoleLabel[] = ["Start", "Stop", ...SPLIT_ROLE_OPTIONS];
@@ -653,7 +688,7 @@ app.post("/api/control/save-results", async (req, res) => {
 
 app.get("/api/results", async (_req, res) => {
   try {
-    const items = await listSavedResultItems();
+    const items = await listSavedResultItems(config.resultsDir);
     res.json({ ok: true, items });
   } catch (error) {
     const message = error instanceof Error ? error.message : "failed to list results";
@@ -669,7 +704,7 @@ app.get("/api/results/:fileName", async (req, res) => {
   }
 
   try {
-    const loaded = await loadSavedResultsFile(fileName);
+    const loaded = await loadSavedResultsFile(config.resultsDir, fileName);
     if (!loaded) {
       res.status(404).json({ error: "saved result not found" });
       return;
@@ -1012,6 +1047,24 @@ function handleTelemetryBinaryFrame(endpointId: string, payload: Buffer): void {
     return;
   }
 
+  if (decoded.type === "device_identity") {
+    incrementMessageType("telemetry_device_identity");
+    handleDeviceIdentity(endpointId, decoded.message);
+    return;
+  }
+
+  if (decoded.type === "device_telemetry") {
+    incrementMessageType("telemetry_device_telemetry");
+    handleDeviceTelemetry(endpointId, decoded.message);
+    return;
+  }
+
+  if (decoded.type === "lap_result") {
+    incrementMessageType("telemetry_lap_result");
+    handleLapResult(endpointId, decoded.message);
+    return;
+  }
+
   messageStats.parseErrors += 1;
   pushEvent("warn", `Unsupported telemetry payload from ${endpointId}`, { endpointId });
 }
@@ -1048,6 +1101,21 @@ function decodeTelemetryEnvelope(payload: Buffer): TelemetryEnvelopeDecoded | nu
     if (payloadType === TELEMETRY_PAYLOAD_SESSION_TIMELINE_SNAPSHOT) {
       const message = decodeTelemetryTimelineSnapshot(payload, payloadTableAddress);
       return message ? { type: "timeline_snapshot", message } : null;
+    }
+
+    if (payloadType === TELEMETRY_PAYLOAD_DEVICE_IDENTITY) {
+      const message = decodeTelemetryDeviceIdentity(payload, payloadTableAddress);
+      return message ? { type: "device_identity", message } : null;
+    }
+
+    if (payloadType === TELEMETRY_PAYLOAD_DEVICE_TELEMETRY) {
+      const message = decodeTelemetryDeviceTelemetry(payload, payloadTableAddress);
+      return message ? { type: "device_telemetry", message } : null;
+    }
+
+    if (payloadType === TELEMETRY_PAYLOAD_LAP_RESULT) {
+      const message = decodeTelemetryLapResult(payload, payloadTableAddress);
+      return message ? { type: "lap_result", message } : null;
     }
 
     return null;
@@ -1189,6 +1257,123 @@ function decodeTelemetryTimelineSnapshot(
   };
 }
 
+function decodeTelemetryDeviceIdentity(
+  payload: Buffer,
+  tableAddress: number,
+): TelemetryDeviceIdentityMessage | null {
+  const stableDeviceIdAddress = readFlatBufferFieldAddress(payload, tableAddress, 0);
+  const deviceNameAddress = readFlatBufferFieldAddress(payload, tableAddress, 1);
+  if (stableDeviceIdAddress === null || deviceNameAddress === null) {
+    return null;
+  }
+
+  const stableDeviceId = String(readFlatBufferString(payload, stableDeviceIdAddress) ?? "").trim();
+  const deviceName = String(readFlatBufferString(payload, deviceNameAddress) ?? "").trim();
+  if (!stableDeviceId || !deviceName) {
+    return null;
+  }
+
+  return {
+    stableDeviceId,
+    deviceName,
+  };
+}
+
+function decodeTelemetryDeviceTelemetry(
+  payload: Buffer,
+  tableAddress: number,
+): TelemetryDeviceTelemetryMessage | null {
+  const stableDeviceIdAddress = readFlatBufferFieldAddress(payload, tableAddress, 0);
+  const roleAddress = readFlatBufferFieldAddress(payload, tableAddress, 1);
+  const sensitivityAddress = readFlatBufferFieldAddress(payload, tableAddress, 2);
+  const latencyMsAddress = readFlatBufferFieldAddress(payload, tableAddress, 3);
+  const clockSyncedAddress = readFlatBufferFieldAddress(payload, tableAddress, 4);
+  const analysisWidthAddress = readFlatBufferFieldAddress(payload, tableAddress, 5);
+  const analysisHeightAddress = readFlatBufferFieldAddress(payload, tableAddress, 6);
+  const timestampMillisAddress = readFlatBufferFieldAddress(payload, tableAddress, 7);
+
+  if (
+    stableDeviceIdAddress === null ||
+    roleAddress === null ||
+    sensitivityAddress === null ||
+    clockSyncedAddress === null ||
+    timestampMillisAddress === null
+  ) {
+    return null;
+  }
+  if (roleAddress + 1 > payload.length || clockSyncedAddress + 1 > payload.length) {
+    return null;
+  }
+
+  const stableDeviceId = String(readFlatBufferString(payload, stableDeviceIdAddress) ?? "").trim();
+  const role = telemetryRoleByteToWireRole(payload.readUInt8(roleAddress));
+  const sensitivity = readFlatBufferInt32(payload, sensitivityAddress);
+  const latencyMs = readOptionalInt32(payload, latencyMsAddress, TELEMETRY_MISSING_OPTIONAL_INT);
+  const analysisWidth = readOptionalInt32(payload, analysisWidthAddress, TELEMETRY_MISSING_OPTIONAL_INT);
+  const analysisHeight = readOptionalInt32(payload, analysisHeightAddress, TELEMETRY_MISSING_OPTIONAL_INT);
+  const timestampMillis = readFlatBufferInt64AsNumber(payload, timestampMillisAddress);
+  const clockSynced = payload.readUInt8(clockSyncedAddress) !== 0;
+
+  if (!stableDeviceId || !Number.isInteger(sensitivity) || sensitivity < 1 || sensitivity > 100) {
+    return null;
+  }
+  if (latencyMs !== null && (!Number.isInteger(latencyMs) || latencyMs < 0)) {
+    return null;
+  }
+  if ((analysisWidth === null) !== (analysisHeight === null)) {
+    return null;
+  }
+  if (analysisWidth !== null && analysisHeight !== null) {
+    if (!Number.isInteger(analysisWidth) || !Number.isInteger(analysisHeight) || analysisWidth <= 0 || analysisHeight <= 0) {
+      return null;
+    }
+  }
+  if (!Number.isFinite(timestampMillis) || timestampMillis <= 0) {
+    return null;
+  }
+
+  return {
+    stableDeviceId,
+    role,
+    sensitivity,
+    latencyMs,
+    clockSynced,
+    analysisWidth,
+    analysisHeight,
+    timestampMillis,
+  };
+}
+
+function decodeTelemetryLapResult(
+  payload: Buffer,
+  tableAddress: number,
+): TelemetryLapResultMessage | null {
+  const senderDeviceNameAddress = readFlatBufferFieldAddress(payload, tableAddress, 0);
+  const startedSensorNanosAddress = readFlatBufferFieldAddress(payload, tableAddress, 1);
+  const stoppedSensorNanosAddress = readFlatBufferFieldAddress(payload, tableAddress, 2);
+  if (senderDeviceNameAddress === null || startedSensorNanosAddress === null || stoppedSensorNanosAddress === null) {
+    return null;
+  }
+
+  const senderDeviceName = String(readFlatBufferString(payload, senderDeviceNameAddress) ?? "").trim();
+  const startedSensorNanos = readFlatBufferInt64AsNumber(payload, startedSensorNanosAddress);
+  const stoppedSensorNanos = readFlatBufferInt64AsNumber(payload, stoppedSensorNanosAddress);
+  if (
+    !senderDeviceName ||
+    !Number.isFinite(startedSensorNanos) ||
+    !Number.isFinite(stoppedSensorNanos) ||
+    stoppedSensorNanos <= startedSensorNanos
+  ) {
+    return null;
+  }
+
+  return {
+    senderDeviceName,
+    startedSensorNanos,
+    stoppedSensorNanos,
+  };
+}
+
 function readOptionalInt64(payload: Buffer, fieldAddress: number | null, missingValue: bigint): number | null {
   if (fieldAddress === null) {
     return null;
@@ -1201,6 +1386,20 @@ function readOptionalInt64(payload: Buffer, fieldAddress: number | null, missing
     return null;
   }
   return safeInt64ToNumber(value);
+}
+
+function readOptionalInt32(payload: Buffer, fieldAddress: number | null, missingValue: number): number | null {
+  if (fieldAddress === null) {
+    return null;
+  }
+  const value = readFlatBufferInt32(payload, fieldAddress);
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  if (value === missingValue) {
+    return null;
+  }
+  return value;
 }
 
 function readFlatBufferRootTableAddress(payload: Buffer): number | null {
@@ -1270,6 +1469,13 @@ function readFlatBufferInt64AsNumber(payload: Buffer, fieldAddress: number): num
     return Number.NaN;
   }
   return safeInt64ToNumber(payload.readBigInt64LE(fieldAddress));
+}
+
+function readFlatBufferInt32(payload: Buffer, fieldAddress: number): number {
+  if (fieldAddress + 4 > payload.length) {
+    return Number.NaN;
+  }
+  return payload.readInt32LE(fieldAddress);
 }
 
 function safeInt64ToNumber(value: bigint): number {
@@ -1845,11 +2051,7 @@ function sendDeviceConfigUpdateToEndpoint(endpointId: string, targetStableDevice
   if (!Number.isInteger(normalizedSensitivity) || normalizedSensitivity < 1 || normalizedSensitivity > 100) {
     return false;
   }
-  return sendTcpJsonMessage(endpointId, {
-    type: "device_config_update",
-    targetStableDeviceId,
-    sensitivity: normalizedSensitivity,
-  });
+  return sendTcpTelemetryConfigUpdate(endpointId, targetStableDeviceId, normalizedSensitivity);
 }
 
 function sendClockResyncRequestToEndpoint(endpointId: string, sampleCount = CLOCK_RESYNC_DEFAULT_SAMPLE_COUNT): boolean {
@@ -1857,10 +2059,7 @@ function sendClockResyncRequestToEndpoint(endpointId: string, sampleCount = CLOC
   if (normalizedSampleCount === null) {
     return false;
   }
-  return sendTcpJsonMessage(endpointId, {
-    type: "clock_resync_request",
-    sampleCount: normalizedSampleCount,
-  });
+  return sendTcpTelemetryClockResync(endpointId, normalizedSampleCount);
 }
 
 function normalizeClockResyncSampleCount(sampleCount: unknown): number | null {
@@ -1975,112 +2174,6 @@ function startClockResyncLoopForEndpoint(
   return true;
 }
 
-function sanitizeFileNameSegment(rawName: unknown): string {
-  const normalized = String(rawName ?? "").trim();
-  const stripped = normalized.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "");
-  if (!stripped) {
-    return "results";
-  }
-  return stripped.slice(0, 80);
-}
-
-function normalizeAthleteNameForResult(rawAthleteName: unknown): string | null {
-  const normalized = String(rawAthleteName ?? "").trim().toLowerCase();
-  if (!normalized) {
-    return null;
-  }
-  const compacted = normalized.replace(/\s+/g, "_").replace(/[^a-z0-9_-]+/g, "").replace(/^_+|_+$/g, "");
-  if (!compacted) {
-    return null;
-  }
-  return compacted.slice(0, 40);
-}
-
-function formatDateForResultName(rawDate: string | number | Date): string {
-  const date = new Date(rawDate);
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = String(date.getFullYear());
-  return `${day}_${month}_${year}`;
-}
-
-function isSafeSavedResultsFileName(fileName: string): boolean {
-  return /^[a-zA-Z0-9._-]+\.json$/u.test(fileName);
-}
-
-async function loadSavedResultsFile(
-  fileName: string,
-): Promise<{ fileName: string; filePath: string; payload: unknown } | null> {
-  if (!isSafeSavedResultsFileName(fileName)) {
-    return null;
-  }
-  const filePath = path.join(config.resultsDir, fileName);
-  try {
-    const rawContent = await fs.readFile(filePath, "utf8");
-    const payload = JSON.parse(rawContent);
-    return {
-      fileName,
-      filePath,
-      payload,
-    };
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      return null;
-    }
-    throw error;
-  }
-}
-
-function summarizeSavedResults(
-  fileName: string,
-  filePath: string,
-  payload: SavedResultsFilePayload,
-  stat: fsSync.Stats,
-): SavedResultSummary {
-  const latestLapResults = Array.isArray(payload?.latestLapResults) ? payload.latestLapResults : [];
-  const bestLap = latestLapResults.find((lap) => Number.isFinite(Number(lap?.elapsedNanos)));
-
-  return {
-    fileName,
-    filePath,
-    resultName: String(payload?.resultName ?? fileName.replace(/\.json$/iu, "")),
-    athleteName: typeof payload?.athleteName === "string" ? payload.athleteName : null,
-    notes: typeof payload?.notes === "string" ? payload.notes : null,
-    runId: typeof payload?.runId === "string" ? payload.runId : null,
-    savedAtIso:
-      typeof payload?.exportedAtIso === "string" && payload.exportedAtIso.length > 0
-        ? payload.exportedAtIso
-        : new Date(stat.mtimeMs).toISOString(),
-    resultCount: latestLapResults.length,
-    bestElapsedNanos: bestLap ? Number(bestLap.elapsedNanos) : null,
-  };
-}
-
-async function listSavedResultItems() {
-  await fs.mkdir(config.resultsDir, { recursive: true });
-  const dirEntries = await fs.readdir(config.resultsDir, { withFileTypes: true });
-  const savedFiles = dirEntries.filter((entry) => entry.isFile() && isSafeSavedResultsFileName(entry.name));
-
-  const items: SavedResultSummary[] = [];
-  for (const entry of savedFiles) {
-    const filePath = path.join(config.resultsDir, entry.name);
-    try {
-      const [rawContent, stat] = await Promise.all([fs.readFile(filePath, "utf8"), fs.stat(filePath)]);
-      const payload = JSON.parse(rawContent);
-      items.push(summarizeSavedResults(entry.name, filePath, payload, stat));
-    } catch {
-      // Ignore unreadable or malformed files to keep listing resilient.
-    }
-  }
-
-  return items.sort((left, right) => String(right.savedAtIso).localeCompare(String(left.savedAtIso)));
-}
-
-function roleOrderIndex(role: RoleLabel): number {
-  const index = ROLE_ORDER.indexOf(role);
-  return index === -1 ? ROLE_ORDER.length : index;
-}
-
 function autoAssignRoleForNewJoin(endpointId: string): void {
   const existingRole = sessionState.roleAssignments[endpointId];
   if (existingRole) {
@@ -2099,30 +2192,7 @@ function autoAssignRoleForNewJoin(endpointId: string): void {
 }
 
 function computeRoleOptions() {
-  const assignedRoles = new Set(Object.values(sessionState.roleAssignments));
-
-  let unlockedSplitCount = 1;
-  while (
-    unlockedSplitCount < SPLIT_ROLE_OPTIONS.length &&
-    assignedRoles.has(SPLIT_ROLE_OPTIONS[unlockedSplitCount - 1])
-  ) {
-    unlockedSplitCount += 1;
-  }
-
-  const options: RoleLabel[] = [
-    "Unassigned",
-    "Start",
-    ...SPLIT_ROLE_OPTIONS.slice(0, unlockedSplitCount),
-    "Stop",
-  ];
-
-  for (const assignedRole of assignedRoles) {
-    if (SPLIT_ROLE_OPTIONS.includes(assignedRole) && !options.includes(assignedRole)) {
-      options.push(assignedRole);
-    }
-  }
-
-  return options.sort((left, right) => roleOrderIndex(left) - roleOrderIndex(right));
+  return computeProgressiveRoleOptions(Object.values(sessionState.roleAssignments)) as RoleLabel[];
 }
 
 function roleLabelToWireRole(roleLabel: string): string {
@@ -2588,12 +2658,299 @@ function sendTcpJsonMessage(endpointId: string, payloadObject: unknown): boolean
   return sendTcpFrame(endpointId, FRAME_KIND_MESSAGE, payloadBuffer);
 }
 
+function createOptionalFlatBufferString(
+  builder: flatbuffers.Builder,
+  value: string | null | undefined,
+): flatbuffers.Offset {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (!normalized) {
+    return 0;
+  }
+  return builder.createString(normalized);
+}
+
+function toTelemetryInt64(value: number | null | undefined, fallback: bigint): bigint {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  const truncated = Math.trunc(numeric);
+  if (truncated > Number.MAX_SAFE_INTEGER) {
+    return MAX_SAFE_INT64;
+  }
+  if (truncated < Number.MIN_SAFE_INTEGER) {
+    return MIN_SAFE_INT64;
+  }
+  return BigInt(truncated);
+}
+
+function wireRoleToTelemetryRole(rawRole: unknown): FlatBufferSessionDeviceRole {
+  const normalized = String(rawRole ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+  if (normalized === "start") {
+    return FlatBufferSessionDeviceRole.START;
+  }
+  if (normalized === "split" || normalized === "split1") {
+    return FlatBufferSessionDeviceRole.SPLIT1;
+  }
+  if (normalized === "split2") {
+    return FlatBufferSessionDeviceRole.SPLIT2;
+  }
+  if (normalized === "split3") {
+    return FlatBufferSessionDeviceRole.SPLIT3;
+  }
+  if (normalized === "split4") {
+    return FlatBufferSessionDeviceRole.SPLIT4;
+  }
+  if (normalized === "stop") {
+    return FlatBufferSessionDeviceRole.STOP;
+  }
+  if (normalized === "display") {
+    return FlatBufferSessionDeviceRole.DISPLAY;
+  }
+  return FlatBufferSessionDeviceRole.UNASSIGNED;
+}
+
+function sendTelemetryEnvelopeFrame(
+  endpointId: string,
+  payloadType: FlatBufferTelemetryPayload,
+  buildPayload: (builder: flatbuffers.Builder) => flatbuffers.Offset,
+  initialSize = 256,
+): boolean {
+  const builder = new flatbuffers.Builder(initialSize);
+  const payloadOffset = buildPayload(builder);
+  const envelopeOffset = FlatBufferTelemetryEnvelope.createTelemetryEnvelope(builder, payloadType, payloadOffset);
+  FlatBufferTelemetryEnvelope.finishTelemetryEnvelopeBuffer(builder, envelopeOffset);
+  return sendTcpFrame(endpointId, FRAME_KIND_TELEMETRY_BINARY, Buffer.from(builder.asUint8Array()));
+}
+
+function sendTcpTelemetryTrigger(
+  endpointId: string,
+  triggerType: string,
+  triggerSensorNanos: number,
+  splitIndex: number | null,
+): boolean {
+  if (!triggerType.trim()) {
+    return false;
+  }
+  return sendTelemetryEnvelopeFrame(
+    endpointId,
+    FlatBufferTelemetryPayload.SessionTrigger,
+    (builder) => {
+      const triggerTypeOffset = builder.createString(triggerType);
+      const normalizedSplitIndex = Number.isInteger(splitIndex)
+        ? Number(splitIndex)
+        : TELEMETRY_MISSING_OPTIONAL_INT;
+      return FlatBufferSessionTrigger.createSessionTrigger(
+        builder,
+        triggerTypeOffset,
+        normalizedSplitIndex,
+        toTelemetryInt64(triggerSensorNanos, 0n),
+      );
+    },
+    128,
+  );
+}
+
+function sendTcpTelemetryTriggerRefinement(
+  endpointId: string,
+  runId: string,
+  role: string,
+  provisionalHostSensorNanos: number,
+  refinedHostSensorNanos: number,
+): boolean {
+  if (!runId.trim()) {
+    return false;
+  }
+  const roleEnum = wireRoleToTelemetryRole(role);
+  if (roleEnum === FlatBufferSessionDeviceRole.UNASSIGNED) {
+    return false;
+  }
+  return sendTelemetryEnvelopeFrame(
+    endpointId,
+    FlatBufferTelemetryPayload.TriggerRefinement,
+    (builder) => {
+      const runIdOffset = builder.createString(runId);
+      return FlatBufferTriggerRefinement.createTriggerRefinement(
+        builder,
+        runIdOffset,
+        roleEnum,
+        toTelemetryInt64(provisionalHostSensorNanos, 0n),
+        toTelemetryInt64(refinedHostSensorNanos, 0n),
+      );
+    },
+    192,
+  );
+}
+
+function sendTcpTelemetryTimelineSnapshot(
+  endpointId: string,
+  payload: {
+    hostStartSensorNanos: number | null;
+    hostStopSensorNanos: number | null;
+    hostSplitMarks: Array<{ role: string; hostSensorNanos: number }>;
+    sentElapsedNanos: number;
+  },
+): boolean {
+  return sendTelemetryEnvelopeFrame(
+    endpointId,
+    FlatBufferTelemetryPayload.SessionTimelineSnapshot,
+    (builder) => {
+      const splitMarkOffsets: flatbuffers.Offset[] = [];
+      for (const splitMark of payload.hostSplitMarks) {
+        const roleEnum = wireRoleToTelemetryRole(splitMark.role);
+        if (roleEnum === FlatBufferSessionDeviceRole.UNASSIGNED) {
+          continue;
+        }
+        splitMarkOffsets.push(
+          FlatBufferSessionSplitMark.createSessionSplitMark(
+            builder,
+            roleEnum,
+            toTelemetryInt64(splitMark.hostSensorNanos, 0n),
+          ),
+        );
+      }
+      const splitMarksVectorOffset =
+        splitMarkOffsets.length > 0
+          ? FlatBufferSessionTimelineSnapshot.createHostSplitMarksVector(builder, splitMarkOffsets)
+          : 0;
+      return FlatBufferSessionTimelineSnapshot.createSessionTimelineSnapshot(
+        builder,
+        toTelemetryInt64(payload.hostStartSensorNanos, TELEMETRY_MISSING_OPTIONAL_LONG),
+        toTelemetryInt64(payload.hostStopSensorNanos, TELEMETRY_MISSING_OPTIONAL_LONG),
+        splitMarksVectorOffset,
+        toTelemetryInt64(payload.sentElapsedNanos, 0n),
+      );
+    },
+    384,
+  );
+}
+
+function sendTcpTelemetrySnapshot(
+  endpointId: string,
+  payload: {
+    stage: string;
+    monitoringActive: boolean;
+    devices: Array<{ id: string; name: string; role: string; cameraFacing: string; isLocal: boolean }>;
+    timeline: {
+      hostStartSensorNanos: number | null;
+      hostStopSensorNanos: number | null;
+      hostSplitMarks: Array<{ role: string; hostSensorNanos: number }>;
+    };
+    runId: string | null;
+    hostSensorMinusElapsedNanos: number | null;
+    hostGpsUtcOffsetNanos: number | null;
+    hostGpsFixAgeNanos: number | null;
+    selfDeviceId: string | null;
+    anchorDeviceId: string | null;
+    anchorState: string | null;
+  },
+): boolean {
+  return sendTelemetryEnvelopeFrame(
+    endpointId,
+    FlatBufferTelemetryPayload.SessionSnapshot,
+    (builder) => {
+      const stageOffset = builder.createString(payload.stage);
+      const deviceOffsets: flatbuffers.Offset[] = payload.devices.map((device) => {
+        const idOffset = builder.createString(device.id);
+        const nameOffset = builder.createString(device.name);
+        const roleOffset = builder.createString(device.role);
+        const cameraFacingOffset = builder.createString(device.cameraFacing);
+        return FlatBufferSessionSnapshotDevice.createSessionSnapshotDevice(
+          builder,
+          idOffset,
+          nameOffset,
+          roleOffset,
+          cameraFacingOffset,
+          Boolean(device.isLocal),
+        );
+      });
+      const devicesVectorOffset =
+        deviceOffsets.length > 0
+          ? FlatBufferSessionSnapshot.createDevicesVector(builder, deviceOffsets)
+          : 0;
+
+      const splitMarkOffsets: flatbuffers.Offset[] = [];
+      for (const splitMark of payload.timeline.hostSplitMarks) {
+        const roleEnum = wireRoleToTelemetryRole(splitMark.role);
+        if (roleEnum === FlatBufferSessionDeviceRole.UNASSIGNED) {
+          continue;
+        }
+        splitMarkOffsets.push(
+          FlatBufferSessionSplitMark.createSessionSplitMark(
+            builder,
+            roleEnum,
+            toTelemetryInt64(splitMark.hostSensorNanos, 0n),
+          ),
+        );
+      }
+      const splitMarksVectorOffset =
+        splitMarkOffsets.length > 0
+          ? FlatBufferSessionSnapshot.createHostSplitMarksVector(builder, splitMarkOffsets)
+          : 0;
+
+      const runIdOffset = createOptionalFlatBufferString(builder, payload.runId);
+      const selfDeviceIdOffset = createOptionalFlatBufferString(builder, payload.selfDeviceId);
+      const anchorDeviceIdOffset = createOptionalFlatBufferString(builder, payload.anchorDeviceId);
+      const anchorStateOffset = createOptionalFlatBufferString(builder, payload.anchorState);
+
+      return FlatBufferSessionSnapshot.createSessionSnapshot(
+        builder,
+        stageOffset,
+        payload.monitoringActive,
+        devicesVectorOffset,
+        toTelemetryInt64(payload.timeline.hostStartSensorNanos, TELEMETRY_MISSING_OPTIONAL_LONG),
+        toTelemetryInt64(payload.timeline.hostStopSensorNanos, TELEMETRY_MISSING_OPTIONAL_LONG),
+        splitMarksVectorOffset,
+        runIdOffset,
+        toTelemetryInt64(payload.hostSensorMinusElapsedNanos, TELEMETRY_MISSING_OPTIONAL_LONG),
+        toTelemetryInt64(payload.hostGpsUtcOffsetNanos, TELEMETRY_MISSING_OPTIONAL_LONG),
+        toTelemetryInt64(payload.hostGpsFixAgeNanos, TELEMETRY_MISSING_OPTIONAL_LONG),
+        selfDeviceIdOffset,
+        anchorDeviceIdOffset,
+        anchorStateOffset,
+      );
+    },
+    768,
+  );
+}
+
+function sendTcpTelemetryConfigUpdate(endpointId: string, targetStableDeviceId: string, sensitivity: number): boolean {
+  if (!targetStableDeviceId.trim()) {
+    return false;
+  }
+  return sendTelemetryEnvelopeFrame(
+    endpointId,
+    FlatBufferTelemetryPayload.DeviceConfigUpdate,
+    (builder) => {
+      const targetStableDeviceIdOffset = builder.createString(targetStableDeviceId);
+      return FlatBufferDeviceConfigUpdate.createDeviceConfigUpdate(
+        builder,
+        targetStableDeviceIdOffset,
+        sensitivity,
+      );
+    },
+    96,
+  );
+}
+
+function sendTcpTelemetryClockResync(endpointId: string, sampleCount: number): boolean {
+  return sendTelemetryEnvelopeFrame(
+    endpointId,
+    FlatBufferTelemetryPayload.ClockResyncRequest,
+    (builder) => FlatBufferClockResyncRequest.createClockResyncRequest(builder, sampleCount),
+    64,
+  );
+}
+
 function sendProtocolSnapshotToEndpoint(endpointId: string): boolean {
   const payload = createProtocolSnapshotForEndpoint(endpointId);
   if (!payload) {
     return false;
   }
-  return sendTcpJsonMessage(endpointId, payload);
+  return sendTcpTelemetrySnapshot(endpointId, payload);
 }
 
 function broadcastProtocolSnapshots() {
@@ -2603,15 +2960,8 @@ function broadcastProtocolSnapshots() {
 }
 
 function broadcastProtocolTrigger(triggerType: string, triggerSensorNanos: number, splitIndex: number | null = null) {
-  const payload = {
-    type: "session_trigger",
-    triggerType,
-    splitIndex,
-    triggerSensorNanos,
-  };
-
   for (const endpointId of socketsByEndpoint.keys()) {
-    sendTcpJsonMessage(endpointId, payload);
+    sendTcpTelemetryTrigger(endpointId, triggerType, triggerSensorNanos, splitIndex);
   }
 }
 
@@ -2628,16 +2978,14 @@ function broadcastProtocolTriggerRefinement(
     return;
   }
 
-  const payload = {
-    type: "trigger_refinement",
-    runId: sessionState.runId,
-    role,
-    provisionalHostSensorNanos,
-    refinedHostSensorNanos,
-  };
-
   for (const endpointId of socketsByEndpoint.keys()) {
-    sendTcpJsonMessage(endpointId, payload);
+    sendTcpTelemetryTriggerRefinement(
+      endpointId,
+      sessionState.runId,
+      role,
+      provisionalHostSensorNanos,
+      refinedHostSensorNanos,
+    );
   }
 }
 
@@ -2660,7 +3008,7 @@ function createTimelineSnapshotPayload() {
 function broadcastTimelineSnapshot() {
   const payload = createTimelineSnapshotPayload();
   for (const endpointId of socketsByEndpoint.keys()) {
-    sendTcpJsonMessage(endpointId, payload);
+    sendTcpTelemetryTimelineSnapshot(endpointId, payload);
   }
 }
 
@@ -2804,13 +3152,31 @@ function broadcast(payload: unknown): void {
   }
 }
 
-function publishState() {
+let publishQueued = false;
+
+function publishStateNow(): void {
+  publishQueued = false;
   broadcast({ type: "state:update", payload: createSnapshot() });
+}
+
+function publishState() {
+  if (publishQueued) {
+    return;
+  }
+
+  publishQueued = true;
+  queueMicrotask(() => {
+    if (!publishQueued) {
+      return;
+    }
+
+    publishStateNow();
+  });
 }
 
 function shutdown(signal: NodeJS.Signals): void {
   pushEvent("info", `Shutting down after ${signal}`);
-  publishState();
+  publishStateNow();
 
   for (const context of socketsByEndpoint.values()) {
     context.socket.destroy();

@@ -59,11 +59,6 @@ android {
         }
     }
 
-    sourceSets {
-        getByName("main") {
-            java.srcDir(generatedFlatBuffersDir)
-        }
-    }
 }
 
 dependencies {
@@ -78,7 +73,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
-    implementation("com.google.flatbuffers:flatbuffers-java:23.5.26")
+    implementation("com.google.flatbuffers:flatbuffers-java:25.2.10")
     implementation("androidx.compose.ui:ui:1.7.8")
     implementation("androidx.compose.material3:material3:1.3.1")
     implementation("androidx.compose.ui:ui-tooling-preview:1.7.8")

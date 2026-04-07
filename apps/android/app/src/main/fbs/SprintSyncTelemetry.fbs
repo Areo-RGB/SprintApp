@@ -38,10 +38,79 @@ table SessionTimelineSnapshot {
   sentElapsedNanos: long;
 }
 
+table SessionSnapshotDevice {
+  id: string;
+  name: string;
+  role: string;
+  cameraFacing: string;
+  isLocal: bool;
+}
+
+table SessionSnapshot {
+  stage: string;
+  monitoringActive: bool;
+  devices: [SessionSnapshotDevice];
+  hostStartSensorNanos: long = -1;
+  hostStopSensorNanos: long = -1;
+  hostSplitMarks: [SessionSplitMark];
+  runId: string;
+  hostSensorMinusElapsedNanos: long = -1;
+  hostGpsUtcOffsetNanos: long = -1;
+  hostGpsFixAgeNanos: long = -1;
+  selfDeviceId: string;
+  anchorDeviceId: string;
+  anchorState: string;
+}
+
+table TriggerRefinement {
+  runId: string;
+  role: SessionDeviceRole = UNASSIGNED;
+  provisionalHostSensorNanos: long;
+  refinedHostSensorNanos: long;
+}
+
+table DeviceConfigUpdate {
+  targetStableDeviceId: string;
+  sensitivity: int;
+}
+
+table ClockResyncRequest {
+  sampleCount: int;
+}
+
+table DeviceIdentity {
+  stableDeviceId: string;
+  deviceName: string;
+}
+
+table DeviceTelemetry {
+  stableDeviceId: string;
+  role: SessionDeviceRole = UNASSIGNED;
+  sensitivity: int;
+  latencyMs: int = -1;
+  clockSynced: bool;
+  analysisWidth: int = -1;
+  analysisHeight: int = -1;
+  timestampMillis: long;
+}
+
+table LapResult {
+  senderDeviceName: string;
+  startedSensorNanos: long;
+  stoppedSensorNanos: long;
+}
+
 union TelemetryPayload {
   SessionTriggerRequest,
   SessionTrigger,
-  SessionTimelineSnapshot
+  SessionTimelineSnapshot,
+  SessionSnapshot,
+  TriggerRefinement,
+  DeviceConfigUpdate,
+  ClockResyncRequest,
+  DeviceIdentity,
+  DeviceTelemetry,
+  LapResult
 }
 
 table TelemetryEnvelope {

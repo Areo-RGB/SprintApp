@@ -37,7 +37,7 @@ class TelemetryEnvelope : Table() {
         val o = __offset(6); return if (o != 0) __union(obj, o + bb_pos) else null
     }
     companion object {
-        fun validateVersion() = Constants.FLATBUFFERS_23_5_26()
+        fun validateVersion() = Constants.FLATBUFFERS_25_2_10()
         fun getRootAsTelemetryEnvelope(_bb: ByteBuffer): TelemetryEnvelope = getRootAsTelemetryEnvelope(_bb, TelemetryEnvelope())
         fun getRootAsTelemetryEnvelope(_bb: ByteBuffer, obj: TelemetryEnvelope): TelemetryEnvelope {
             _bb.order(ByteOrder.LITTLE_ENDIAN)
