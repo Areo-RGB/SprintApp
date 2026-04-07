@@ -24,7 +24,7 @@
         "COMPLEXITY_THRESHOLD": "10",
         "MAX_DEPTH": "unlimited",
         "PARALLEL_WORKERS": "4",
-        "CACHE_ENABLED": "true",
+        "CACHE_ENABLED": "false",
         "IGNORE_DIRS": "node_modules,venv,.venv,env,.env,dist,build,target,out,.git,.idea,.vscode,__pycache__",
         "INDEX_SOURCE": "true",
         "SCIP_INDEXER": "true",

@@ -25,6 +25,67 @@ import SystemDetails from "./components/SystemDetails";
 
 const AUTO_APPLY_DELAY_MS = 350;
 const DEV_UI_MOCK_MODE = import.meta.env.DEV;
+const FRONTEND_SAVED_RESULTS_URL = "/saved-results.json";
+const FRONTEND_SAVED_RESULTS_LOCAL_KEY = "sprintsync.savedResults.v1";
+const FRONTEND_SAVED_RESULTS_DELETED_KEY = "sprintsync.savedResults.deleted.v1";
+
+function summarizeFrontendSavedResult(fileName: string, payload: any) {
+  const latestLapResults = Array.isArray(payload?.latestLapResults) ? payload.latestLapResults : [];
+  const bestLap = latestLapResults.find((lap: any) => Number.isFinite(Number(lap?.elapsedNanos)));
+  return {
+    fileName,
+    filePath: fileName,
+    resultName: String(payload?.resultName ?? fileName.replace(/\.json$/iu, "")),
+    athleteName: typeof payload?.athleteName === "string" ? payload.athleteName : null,
+    notes: typeof payload?.notes === "string" ? payload.notes : null,
+    runId: typeof payload?.runId === "string" ? payload.runId : null,
+    savedAtIso:
+      typeof payload?.exportedAtIso === "string" && payload.exportedAtIso.length > 0
+        ? payload.exportedAtIso
+        : new Date().toISOString(),
+    resultCount: latestLapResults.length,
+    bestElapsedNanos: bestLap ? Number(bestLap.elapsedNanos) : null,
+  };
+}
+
+async function loadFrontendSavedResultsPayload() {
+  const response = await fetch(FRONTEND_SAVED_RESULTS_URL);
+  if (!response.ok) {
+    throw new Error(`Frontend saved results request failed (${response.status})`);
+  }
+  const payload = await response.json();
+  return Array.isArray(payload) ? payload : [];
+}
+
+function readLocalSavedResultsPayload() {
+  try {
+    const raw = window.localStorage.getItem(FRONTEND_SAVED_RESULTS_LOCAL_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalSavedResultsPayload(entries: any[]) {
+  window.localStorage.setItem(FRONTEND_SAVED_RESULTS_LOCAL_KEY, JSON.stringify(entries));
+}
+
+function readDeletedSavedResultFileNames() {
+  try {
+    const raw = window.localStorage.getItem(FRONTEND_SAVED_RESULTS_DELETED_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeDeletedSavedResultFileNames(fileNames: string[]) {
+  window.localStorage.setItem(FRONTEND_SAVED_RESULTS_DELETED_KEY, JSON.stringify(fileNames));
+}
 
 function createDevMockSnapshot() {
   const now = Date.now();
@@ -203,6 +264,7 @@ export default function App() {
   const [selectedSavedFileName, setSelectedSavedFileName] = useState("");
   const [selectedSavedMeta, setSelectedSavedMeta] = useState(null);
   const [selectedSavedPayload, setSelectedSavedPayload] = useState(null);
+  const [savedResultsByFileName, setSavedResultsByFileName] = useState<Record<string, any>>({});
   const [runHistory, setRunHistory] = useState<Array<{ key: string; rows: any[] }>>([]);
   const [raceClockTickMs, setRaceClockTickMs] = useState(() => Date.now());
   const raceClockBaseMsRef = useRef(null);
@@ -272,19 +334,29 @@ export default function App() {
   async function fetchSavedResultsList(preferredFileName = null) {
     setSavedResultsLoading(true);
     try {
-      if (DEV_UI_MOCK_MODE) {
-        setSavedResults([]);
-        setSelectedSavedFileName("");
-        setSelectedSavedMeta(null);
-        setSelectedSavedPayload(null);
-        setLastError("");
-        return;
-      }
-
-      const response = await fetch("/api/results");
-      if (!response.ok) throw new Error(`Saved results request failed (${response.status})`);
-      const payload = await response.json();
-      const items = Array.isArray(payload?.items) ? payload.items : [];
+      const [staticFrontendItems, localItems] = await Promise.all([
+        loadFrontendSavedResultsPayload().catch(() => []),
+        Promise.resolve(readLocalSavedResultsPayload()),
+      ]);
+      const deletedFileNames = new Set(readDeletedSavedResultFileNames());
+      const frontendItems = [...localItems, ...staticFrontendItems].filter((entry: any, index: number) => {
+        const fileName =
+          typeof entry?.fileName === "string" && entry.fileName.length > 0
+            ? entry.fileName
+            : `saved-result-${index + 1}.json`;
+        return !deletedFileNames.has(fileName);
+      });
+      const byFileName: Record<string, any> = {};
+      const items = frontendItems.map((entry: any, index: number) => {
+        const fileName =
+          typeof entry?.fileName === "string" && entry.fileName.length > 0
+            ? entry.fileName
+            : `saved-result-${index + 1}.json`;
+        const resultPayload = entry?.payload ?? entry;
+        byFileName[fileName] = resultPayload;
+        return summarizeFrontendSavedResult(fileName, resultPayload);
+      });
+      setSavedResultsByFileName(byFileName);
       setSavedResults(items);
 
       if (items.length === 0) {
@@ -313,16 +385,25 @@ export default function App() {
 
     setSavedResultLoading(true);
     try {
-      if (DEV_UI_MOCK_MODE) {
-        setSelectedSavedPayload(null);
+      if (savedResultsByFileName[fileName]) {
+        setSelectedSavedPayload(savedResultsByFileName[fileName]);
         setLastError("");
         return;
       }
 
-      const response = await fetch(`/api/results/${encodeURIComponent(fileName)}`);
-      if (!response.ok) throw new Error(`Saved result load failed (${response.status})`);
-      const payload = await response.json();
-      setSelectedSavedPayload(payload?.payload ?? null);
+      const [staticFrontendItems, localItems] = await Promise.all([
+        loadFrontendSavedResultsPayload().catch(() => []),
+        Promise.resolve(readLocalSavedResultsPayload()),
+      ]);
+      const frontendItems = [...localItems, ...staticFrontendItems];
+      const matched = frontendItems.find((entry: any, index: number) => {
+        const entryFileName =
+          typeof entry?.fileName === "string" && entry.fileName.length > 0
+            ? entry.fileName
+            : `saved-result-${index + 1}.json`;
+        return entryFileName === fileName;
+      });
+      setSelectedSavedPayload(matched ? matched?.payload ?? matched : null);
       setLastError("");
     } catch (error) {
       setSelectedSavedPayload(null);
@@ -455,20 +536,65 @@ export default function App() {
     const notesPrompt = window.prompt("Notes (optional)", "");
     if (notesPrompt === null) return;
 
-    const response = await postControl(
-      "/api/control/save-results",
-      {
-        name: namePrompt,
-        athleteName: athletePrompt,
-        notes: notesPrompt,
-      },
-      "/api/control/save-results",
-    );
+    const now = new Date();
+    const exportedAtIso = now.toISOString();
+    const runId =
+      typeof snapshot?.session?.runId === "string" && snapshot.session.runId.length > 0
+        ? snapshot.session.runId
+        : `run-${Date.now()}`;
+    const fileName = `${String(namePrompt || runId).replace(/[^a-zA-Z0-9._-]+/g, "_")}.json`;
+    const payload = {
+      type: "sprintsync-results",
+      exportedAtIso,
+      exportedAtMs: now.getTime(),
+      runId,
+      resultName: namePrompt,
+      athleteName: athletePrompt,
+      notes: notesPrompt,
+      session: snapshot?.session ?? {},
+      clients: Array.isArray(snapshot?.clients) ? snapshot.clients : [],
+      latestLapResults: Array.isArray(latestLapResults) ? latestLapResults : [],
+      lapHistory: Array.isArray(snapshot?.lapHistory) ? snapshot.lapHistory : [],
+      recentEvents: Array.isArray(snapshot?.recentEvents) ? snapshot.recentEvents : [],
+    };
 
-    if (response?.fileName) {
-      await fetchSavedResultsList(response.fileName);
-      setActiveTab("saved");
+    if (!Array.isArray(payload.latestLapResults) || payload.latestLapResults.length === 0) {
+      setLastError("No lap results available to save.");
+      return;
     }
+
+    const previousLocalItems = readLocalSavedResultsPayload();
+    const nextLocalItems = [
+      { fileName, payload },
+      ...previousLocalItems.filter((entry: any) => entry?.fileName !== fileName),
+    ];
+    writeLocalSavedResultsPayload(nextLocalItems);
+    const deleted = readDeletedSavedResultFileNames();
+    if (deleted.includes(fileName)) {
+      writeDeletedSavedResultFileNames(deleted.filter((name) => name !== fileName));
+    }
+    await fetchSavedResultsList(fileName);
+    setActiveTab("saved");
+    setLastError("");
+  }
+
+  function deleteSavedResult(fileName: string) {
+    if (typeof fileName !== "string" || fileName.length === 0) return;
+    const localItems = readLocalSavedResultsPayload().filter((entry: any) => entry?.fileName !== fileName);
+    writeLocalSavedResultsPayload(localItems);
+
+    const deleted = readDeletedSavedResultFileNames();
+    if (!deleted.includes(fileName)) {
+      writeDeletedSavedResultFileNames([...deleted, fileName]);
+    }
+
+    const fallbackFileName = savedResults.find((item) => item?.fileName !== fileName)?.fileName ?? "";
+    setSelectedSavedFileName((current) => (current === fileName ? fallbackFileName : current));
+    setSelectedSavedMeta((current) => (current?.fileName === fileName ? null : current));
+    if (selectedSavedFileName === fileName) {
+      setSelectedSavedPayload(null);
+    }
+    fetchSavedResultsList(fallbackFileName || null);
   }
 
   useEffect(() => {
@@ -793,7 +919,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setActiveTab("live")}
-                  className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-700/60 hover:text-white"
+                  className="rounded-lg px-4 py-2 text-sm font-semibold text-blue-100 transition-colors hover:bg-blue-700/40 hover:text-white"
                 >
                   Live Monitor
                 </button>
@@ -803,10 +929,10 @@ export default function App() {
                     setActiveTab("saved");
                     fetchSavedResultsList();
                   }}
-                  className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900 transition-colors"
+                  className="tab-active-blue rounded-lg px-4 py-2 text-sm font-semibold transition-colors"
                 >
                   <span>Saved Results</span>
-                  <span className="ml-2 inline-flex min-w-6 items-center justify-center rounded-full bg-slate-700 px-1.5 py-0.5 text-xs text-white">
+                  <span className="ml-2 inline-flex min-w-6 items-center justify-center rounded-full bg-slate-100 px-1.5 py-0.5 text-xs text-slate-900">
                     {savedResults.length}
                   </span>
                 </button>
@@ -816,6 +942,7 @@ export default function App() {
               savedResultsLoading={savedResultsLoading}
               fetchSavedResultsList={fetchSavedResultsList}
               savedResults={savedResults}
+              deleteSavedResult={deleteSavedResult}
               selectedSavedFileName={selectedSavedFileName}
               setSelectedSavedFileName={setSelectedSavedFileName}
               setSelectedSavedMeta={setSelectedSavedMeta}
@@ -824,8 +951,6 @@ export default function App() {
               selectedSavedMeta={selectedSavedMeta}
               savedLatestLapResults={savedLatestLapResults}
               savedMonitoringPointRows={savedMonitoringPointRows}
-              speedUnit={speedUnit}
-              toggleSpeedUnit={toggleSpeedUnit}
             />
           </>
         ) : (
@@ -838,8 +963,8 @@ export default function App() {
                     onClick={() => setActiveTab("live")}
                     className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
                       activeTab === "live"
-                        ? "bg-slate-100 text-slate-900"
-                        : "text-slate-300 hover:bg-slate-700/60 hover:text-white"
+                        ? "tab-active-blue"
+                        : "text-blue-100 hover:bg-blue-700/40 hover:text-white"
                     }`}
                   >
                     Live Monitor
@@ -852,15 +977,15 @@ export default function App() {
                     }}
                     className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
                       activeTab === "saved"
-                        ? "bg-slate-100 text-slate-900"
-                        : "text-slate-300 hover:bg-slate-700/60 hover:text-white"
+                        ? "tab-active-blue"
+                        : "text-blue-100 hover:bg-blue-700/40 hover:text-white"
                     }`}
                   >
                     <span>Saved Results</span>
                     {activeTab === "saved" ? (
                       <span
                         className={`ml-2 inline-flex min-w-6 items-center justify-center rounded-full px-1.5 py-0.5 text-xs ${
-                          activeTab === "saved" ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-600"
+                          activeTab === "saved" ? "bg-slate-100 text-slate-900" : "bg-slate-100 text-slate-600"
                         }`}
                       >
                         {savedResults.length}
@@ -903,47 +1028,6 @@ export default function App() {
             />
 
             <div className="space-y-4">
-              <details open className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <summary className="cursor-pointer text-sm font-semibold uppercase tracking-wide text-slate-700">
-                  {monitoringActive ? "Monitoring Results" : "Latest Lap Results"}
-                </summary>
-                <p className="mt-2 mb-3 text-xs text-slate-500">Distance checkpoints with time, speed at point, and acceleration</p>
-                {latestLapResults.length === 0 ? (
-                  <p className="text-sm text-slate-500">
-                    No monitoring results recorded yet. Fire Start and Stop triggers (with splits if needed) to generate results.
-                  </p>
-                ) : (
-                  <div className="overflow-auto">
-                    <table className="min-w-full text-left text-sm">
-                      <thead className="text-xs uppercase tracking-wide text-slate-500">
-                        <tr>
-                          <th className="pb-2 pr-3">Distance</th>
-                          <th className="pb-2 pr-3">Time</th>
-                          <th className="pb-2 pr-3">Speed</th>
-                          <th className="pb-2">Acceleration (m/s^2)</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {monitoringPointRows.map(({ lap, pointSpeedMps, accelerationMps2 }) => {
-                          return (
-                            <tr key={lap.id}>
-                              <td className="py-2 pr-3 text-slate-700">{formatMeters(lap.distanceMeters)}</td>
-                              <td className="py-2 pr-3 font-mono text-slate-900">{formatDurationNanos(lap.elapsedNanos)}</td>
-                              <td className="py-2 pr-3 text-slate-700">
-                                <button type="button" onClick={toggleSpeedUnit} className="font-mono">
-                                  {formatSpeedWithUnit(pointSpeedMps, speedUnit)}
-                                </button>
-                              </td>
-                              <td className="py-2 text-slate-700">{formatAcceleration(accelerationMps2)}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </details>
-
               <details open className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <summary className="cursor-pointer text-sm font-semibold uppercase tracking-wide text-slate-700">
                   {monitoringActive ? "Monitoring Devices" : "Connected Devices"}

@@ -1,0 +1,79 @@
+{
+  "type": "sprintsync-results",
+  "exportedAtIso": "2026-04-06T18:30:00.000Z",
+  "exportedAtMs": 1775500200000,
+  "runId": "run-2026-04-06",
+  "resultName": "Run 2026-04-06",
+  "athleteName": "Demo Athlete",
+  "notes": "20m sprint with Start, Split 1 (10m), Split 2 (15m), Stop (20m)",
+  "session": {
+    "monitoringActive": false,
+    "runCompleted": true
+  },
+  "clients": [
+    {
+      "targetId": "dev-1",
+      "role": "Start",
+      "distanceMeters": 0
+    },
+    {
+      "targetId": "dev-2",
+      "role": "Split 1",
+      "distanceMeters": 10
+    },
+    {
+      "targetId": "dev-3",
+      "role": "Split 2",
+      "distanceMeters": 15
+    },
+    {
+      "targetId": "dev-4",
+      "role": "Stop",
+      "distanceMeters": 20
+    }
+  ],
+  "latestLapResults": [
+    {
+      "id": "lap-start",
+      "roleLabel": "Start",
+      "distanceMeters": 0,
+      "elapsedNanos": 0,
+      "lapElapsedNanos": 0,
+      "lapSpeedMps": 0
+    },
+    {
+      "id": "lap-s1",
+      "roleLabel": "Split 1",
+      "distanceMeters": 10,
+      "elapsedNanos": 2060000000,
+      "lapElapsedNanos": 2060000000,
+      "lapSpeedMps": 4.854
+    },
+    {
+      "id": "lap-s2",
+      "roleLabel": "Split 2",
+      "distanceMeters": 15,
+      "elapsedNanos": 3280000000,
+      "lapElapsedNanos": 1220000000,
+      "lapSpeedMps": 4.098
+    },
+    {
+      "id": "lap-stop",
+      "roleLabel": "Stop",
+      "distanceMeters": 20,
+      "elapsedNanos": 4450000000,
+      "lapElapsedNanos": 1170000000,
+      "lapSpeedMps": 4.274
+    }
+  ],
+  "lapHistory": [],
+  "recentEvents": [
+    {
+      "id": "e1",
+      "timestampIso": "2026-04-06T18:30:00.000Z",
+      "level": "info",
+      "message": "Monitoring stopped",
+      "runId": "run-2026-04-06"
+    }
+  ]
+}

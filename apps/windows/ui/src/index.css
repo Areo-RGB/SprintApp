@@ -108,3 +108,9 @@ body {
 .shadow-2xl {
   box-shadow: none !important;
 }
+
+/* Keep tab active blue distinct from global grayscale remaps */
+.tab-active-blue {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
+}

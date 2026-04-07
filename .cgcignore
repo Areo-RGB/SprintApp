@@ -45,6 +45,7 @@ apps/android/.gradle/
 apps/android/**/build/
 apps/windows/**/dist/
 apps/windows/**/build/
+apps/windows/backend/src/schema/sprint-sync/schema/
 **/*.apk
 **/*.aab
 **/*.exe
