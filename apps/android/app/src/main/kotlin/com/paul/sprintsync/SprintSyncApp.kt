@@ -149,9 +149,6 @@ data class SprintSyncUiState(
     val runDetailsSaveError: String? = null,
     val showSavedRunResultDetailsDialog: Boolean = false,
     val selectedSavedRunResult: SavedRunResult? = null,
-    val updateAvailable: Boolean = false,
-    val updateVersionName: String = "",
-    val updateReleaseNotes: String = "",
     val updateDownloading: Boolean = false,
 )
 
@@ -226,8 +223,6 @@ fun SprintSyncApp(
     onDismissRunDetailsSaveDialog: () -> Unit,
     onRunDetailsAthleteNameChanged: (String) -> Unit,
     onConfirmRunDetailsSave: () -> Unit,
-    onDismissUpdate: () -> Unit = {},
-    onDownloadUpdate: () -> Unit = {},
 ) {
     var showPreview by rememberSaveable { mutableStateOf(true) }
     var showDebugInfo by rememberSaveable { mutableStateOf(false) }
@@ -343,6 +338,9 @@ fun SprintSyncApp(
                             devices = uiState.devices,
                             showDebugInfo = showDebugInfo,
                         )
+                    }
+                    item {
+                        AppVersionCard()
                     }
                 }
 
@@ -498,23 +496,6 @@ fun SprintSyncApp(
             }
             }
 
-            if (uiState.updateAvailable && !uiState.updateDownloading && uiState.stage == SessionStage.SETUP) {
-                AlertDialog(
-                    onDismissRequest = { onDismissUpdate() },
-                    title = { Text("Update Available") },
-                    text = { Text("Version ${uiState.updateVersionName} is available.\n\n${uiState.updateReleaseNotes}") },
-                    confirmButton = {
-                        Button(onClick = { onDownloadUpdate() }) {
-                            Text("Update")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { onDismissUpdate() }) {
-                            Text("Later")
-                        }
-                    },
-                )
-            }
             if (uiState.updateDownloading) {
                 AlertDialog(
                     onDismissRequest = {},
@@ -2054,6 +2035,28 @@ private fun EventsCard(recentEvents: List<String>) {
                 Text(event, style = MaterialTheme.typography.bodySmall)
             }
         }
+    }
+}
+
+@Composable
+private fun AppVersionCard() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = "App Version",
+            style = MaterialTheme.typography.labelMedium,
+            color = Color.Gray
+        )
+        Text(
+            text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 

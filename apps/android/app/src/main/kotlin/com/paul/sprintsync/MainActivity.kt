@@ -75,7 +75,6 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
     private lateinit var sensorNativeController: SensorNativeController
     private lateinit var connectionsManager: SessionConnectionsManager
     private lateinit var appUpdateChecker: AppUpdateChecker
-    private var pendingApkUrl: String? = null
     private lateinit var motionDetectionController: MotionDetectionController
     private lateinit var raceSessionController: RaceSessionController
     private lateinit var previewViewFactory: SensorNativePreviewViewFactory
@@ -127,13 +126,11 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                 currentVersionCode = BuildConfig.VERSION_CODE,
             )
             if (update != null) {
-                pendingApkUrl = update.apkUrl
-                updateUiState {
-                    copy(
-                        updateAvailable = true,
-                        updateVersionName = update.versionName,
-                        updateReleaseNotes = update.releaseNotes,
-                    )
+                updateUiState { copy(updateDownloading = true) }
+                val success = appUpdateChecker.downloadAndInstall(update.apkUrl)
+                updateUiState { copy(updateDownloading = false) }
+                if (!success) {
+                    appendEvent("Update download failed")
                 }
             }
         }
@@ -754,22 +751,9 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                             }
                         }
                     },
-                    onDismissUpdate = {
-                        updateUiState { copy(updateAvailable = false) }
-                    },
-                    onDownloadUpdate = {
-                        val url = pendingApkUrl ?: return@SprintSyncApp
-                        updateUiState { copy(updateDownloading = true) }
-                        lifecycleScope.launch {
-                            val success = appUpdateChecker.downloadAndInstall(url)
-                            updateUiState { copy(updateDownloading = false, updateAvailable = false) }
-                            if (!success) {
-                                appendEvent("Update download failed")
-                            }
-                        }
-                    },
                 )
             }
+
 
         }
 
