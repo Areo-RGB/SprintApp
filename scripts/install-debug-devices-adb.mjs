@@ -82,6 +82,7 @@ const adbCommand = resolveAdbCommand();
 
 const packageName = 'sync.sprint';
 const apkCandidates = [
+  resolve(process.cwd(), 'apps', 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk'),
   resolve(process.cwd(), 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk'),
   // Legacy fallback for older custom Gradle layout.
   resolve(process.cwd(), 'build', 'app', 'outputs', 'apk', 'debug', 'app-debug.apk'),
@@ -110,6 +111,7 @@ function toAdbFilePath(filePath) {
 
 function readDeclaredPermissions() {
   const manifestCandidates = [
+    resolve(process.cwd(), 'apps', 'android', 'app', 'src', 'main', 'AndroidManifest.xml'),
     resolve(process.cwd(), 'android', 'app', 'src', 'main', 'AndroidManifest.xml'),
     resolve(process.cwd(), 'app', 'src', 'main', 'AndroidManifest.xml'),
   ];

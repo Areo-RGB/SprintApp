@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { deriveMonitoringElapsedMs } from "./raceClock.js";
 
 const ROLE_ORDER = ["Unassigned", "Start", "Split 1", "Split 2", "Split 3", "Split 4", "Stop"];
 const AUTO_APPLY_DELAY_MS = 350;
@@ -510,6 +511,7 @@ export default function App() {
   const session = snapshot?.session ?? {
     stage: "LOBBY",
     monitoringActive: false,
+    monitoringStartedAtMs: null,
     monitoringElapsedMs: 0,
     hostStartSensorNanos: null,
     hostStopSensorNanos: null,
@@ -524,6 +526,15 @@ export default function App() {
   const hostStopSensorNanos = Number.isFinite(session.hostStopSensorNanos)
     ? session.hostStopSensorNanos
     : null;
+  const monitoringStartedAtMs = Number.isFinite(session.monitoringStartedAtMs)
+    ? session.monitoringStartedAtMs
+    : null;
+  const monitoringElapsedMs = deriveMonitoringElapsedMs({
+    monitoringActive,
+    monitoringStartedAtMs,
+    monitoringElapsedMs: session.monitoringElapsedMs,
+    nowMs: raceClockTickMs,
+  });
   const hostSplitMarks = Array.isArray(session.hostSplitMarks) ? session.hostSplitMarks : [];
   const firedSplitRoles = new Set(
     hostSplitMarks
@@ -574,12 +585,11 @@ export default function App() {
       return;
     }
 
-    const elapsedMs = Number.isFinite(session.monitoringElapsedMs) ? session.monitoringElapsedMs : 0;
     raceClockAnchorRef.current = {
-      elapsedMs,
+      elapsedMs: monitoringElapsedMs,
       capturedAtMs: Date.now(),
     };
-  }, [hostStartSensorNanos, hostStopSensorNanos, monitoringActive, session.monitoringElapsedMs]);
+  }, [hostStartSensorNanos, hostStopSensorNanos, monitoringActive, monitoringElapsedMs]);
 
   useEffect(() => {
     const runStopped =
@@ -602,10 +612,10 @@ export default function App() {
       raceClockBaseMsRef.current = null;
       return;
     }
-    if (raceClockBaseMsRef.current === null && Number.isFinite(session.monitoringElapsedMs)) {
-      raceClockBaseMsRef.current = session.monitoringElapsedMs;
+    if (raceClockBaseMsRef.current === null && Number.isFinite(monitoringElapsedMs)) {
+      raceClockBaseMsRef.current = monitoringElapsedMs;
     }
-  }, [hostStartSensorNanos, session.monitoringElapsedMs]);
+  }, [hostStartSensorNanos, monitoringElapsedMs]);
 
   const raceClockDisplay = useMemo(() => {
     if (hostStartSensorNanos === null) {
@@ -618,7 +628,6 @@ export default function App() {
       return "00.00";
     }
 
-    const monitoringElapsedMs = Number.isFinite(session.monitoringElapsedMs) ? session.monitoringElapsedMs : 0;
     const baseMs = Number.isFinite(raceClockBaseMsRef.current) ? raceClockBaseMsRef.current : monitoringElapsedMs;
     const anchorElapsedMs = Number.isFinite(raceClockAnchorRef.current.elapsedMs) ? raceClockAnchorRef.current.elapsedMs : monitoringElapsedMs;
     const anchorCapturedAtMs = Number.isFinite(raceClockAnchorRef.current.capturedAtMs)
@@ -628,7 +637,7 @@ export default function App() {
     const effectiveElapsedMs = Math.max(monitoringElapsedMs, interpolatedElapsedMs);
 
     return formatRaceClockMs(Math.max(0, effectiveElapsedMs - baseMs));
-  }, [hostStartSensorNanos, hostStopSensorNanos, monitoringActive, raceClockTickMs, session.monitoringElapsedMs]);
+  }, [hostStartSensorNanos, hostStopSensorNanos, monitoringActive, raceClockTickMs, monitoringElapsedMs]);
 
   function triggerDisabled(roleLabel) {
     if (!monitoringActive) {

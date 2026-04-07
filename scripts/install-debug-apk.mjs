@@ -89,6 +89,7 @@ function toAdbFilePath(filePath) {
 
 const appId = 'sync.sprint';
 const apkCandidates = [
+  resolve(process.cwd(), 'apps', 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk'),
   resolve(process.cwd(), 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk'),
   // Legacy fallback for older custom Gradle layout.
   resolve(process.cwd(), 'build', 'app', 'outputs', 'apk', 'debug', 'app-debug.apk'),

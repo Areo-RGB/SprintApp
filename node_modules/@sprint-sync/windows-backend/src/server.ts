@@ -716,12 +716,6 @@ websocketServer.on("connection", (socket) => {
   });
 });
 
-const monitoringTicker = setInterval(() => {
-  if (sessionState.monitoringActive) {
-    publishState();
-  }
-}, 200);
-
 const tcpServer = net.createServer((socket) => {
   const endpointId = `${socket.remoteAddress ?? "unknown"}:${socket.remotePort ?? 0}`;
   socket.setNoDelay(true);
@@ -2733,6 +2727,7 @@ function createSnapshot() {
     session: {
       stage: sessionState.stage,
       monitoringActive: sessionState.monitoringActive,
+      monitoringStartedAtMs: sessionState.monitoringStartedAtMs,
       monitoringStartedIso: sessionState.monitoringStartedIso,
       monitoringElapsedMs,
       runId: sessionState.runId,
@@ -2822,7 +2817,6 @@ function shutdown(signal: NodeJS.Signals): void {
   }
   stopAllClockResyncLoops();
   socketsByEndpoint.clear();
-  clearInterval(monitoringTicker);
 
   tcpServer.close(() => {
     httpServer.close(() => {

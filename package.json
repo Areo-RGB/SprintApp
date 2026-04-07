@@ -8,8 +8,8 @@
     "apps/windows/desktop-tauri"
   ],
   "scripts": {
-    "build:debug:apk": "cmd.exe /c \"cd /d C:\\Users\\paul\\projects\\photo-finish-tcp-device-apks\\apps\\android && gradlew.bat :app:assembleDebug\"",
-    "build:release:apk": "cmd.exe /c \"cd /d C:\\Users\\paul\\projects\\photo-finish-tcp-device-apks\\apps\\android && gradlew.bat :app:assembleRelease\"",
+    "build:debug:apk": "cmd.exe /c \"cd /d apps\\android && gradlew.bat :app:assembleDebug\"",
+    "build:release:apk": "cmd.exe /c \"cd /d apps\\android && gradlew.bat :app:assembleRelease\"",
     "rebuild:debug:devices": "npm run build:debug:apk && node scripts/install-debug-apk.mjs",
     "install:debug:devices:adb": "node scripts/install-debug-devices-adb.mjs",
     "rebuild:debug:devices:adb": "npm run build:debug:apk && npm run install:debug:devices:adb",
