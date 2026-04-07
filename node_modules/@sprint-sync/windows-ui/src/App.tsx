@@ -204,7 +204,6 @@ export default function App() {
   const [selectedSavedMeta, setSelectedSavedMeta] = useState(null);
   const [selectedSavedPayload, setSelectedSavedPayload] = useState(null);
   const [runHistory, setRunHistory] = useState<Array<{ key: string; rows: any[] }>>([]);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [raceClockTickMs, setRaceClockTickMs] = useState(() => Date.now());
   const raceClockBaseMsRef = useRef(null);
   const raceClockAnchorRef = useRef({
@@ -781,94 +780,107 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-black text-slate-900">
-      <main className="flex w-full flex-col md:flex-row">
-        <aside
-          className={`w-full shrink-0 border-r border-slate-200 bg-white shadow-sm transition-all duration-200 md:sticky md:top-0 md:h-screen ${
-            sidebarCollapsed ? "md:w-16" : "md:w-max"
-          }`}
-        >
-          <div className="flex items-center justify-end px-2 py-2">
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed((previous) => !previous)}
-              className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-            >
-              {sidebarCollapsed ? ">>" : "<<"}
-            </button>
-          </div>
-          {!sidebarCollapsed ? (
-            <nav className="space-y-1 px-2 py-0">
-              <button
-                type="button"
-                onClick={() => setActiveTab("live")}
-                className={`flex items-center rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
-                  activeTab === "live"
-                    ? "bg-blue-600 text-white"
-                    : "text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                <span>Live Monitor</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab("saved");
-                  fetchSavedResultsList();
-                }}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
-                  activeTab === "saved"
-                    ? "bg-blue-600 text-white"
-                    : "text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                <span>Saved Results</span>
-                {activeTab === "saved" ? (
-                  <span
-                    className={`inline-flex min-w-6 items-center justify-center rounded-full px-1.5 py-0.5 text-xs ${
-                      activeTab === "saved" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {savedResults.length}
-                  </span>
-                ) : null}
-              </button>
-            </nav>
-          ) : null}
-        </aside>
-
-        <section className="flex-1 space-y-4 p-2 md:p-3">
+      <main className="flex w-full flex-col gap-4 px-2 pb-2 pt-0 md:px-3 md:pb-3 md:pt-0">
+        <section className="space-y-4">
           {lastError ? (
             <p className="rounded-md bg-rose-100 px-3 py-2 text-sm text-rose-700">{lastError}</p>
           ) : null}
 
         {activeTab === "saved" ? (
-          <SavedResultsPanel
-            savedResultsLoading={savedResultsLoading}
-            fetchSavedResultsList={fetchSavedResultsList}
-            savedResults={savedResults}
-            selectedSavedFileName={selectedSavedFileName}
-            setSelectedSavedFileName={setSelectedSavedFileName}
-            setSelectedSavedMeta={setSelectedSavedMeta}
-            savedResultLoading={savedResultLoading}
-            selectedSavedPayload={selectedSavedPayload}
-            selectedSavedMeta={selectedSavedMeta}
-            savedLatestLapResults={savedLatestLapResults}
-            savedMonitoringPointRows={savedMonitoringPointRows}
-            speedUnit={speedUnit}
-            toggleSpeedUnit={toggleSpeedUnit}
-          />
-        ) : (
           <>
-            <RaceTimerPanel
-              raceClockDisplay={raceClockDisplay}
-              timerStateLabel={timerStateLabel}
-              hostStartSensorNanos={hostStartSensorNanos}
-              hostSplitMarks={hostSplitMarks}
-              hostStopSensorNanos={hostStopSensorNanos}
-              monitoringPointRows={monitoringHistoryRows}
+            <div className="flex justify-center">
+              <nav className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 p-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("live")}
+                  className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-700/60 hover:text-white"
+                >
+                  Live Monitor
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("saved");
+                    fetchSavedResultsList();
+                  }}
+                  className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900 transition-colors"
+                >
+                  <span>Saved Results</span>
+                  <span className="ml-2 inline-flex min-w-6 items-center justify-center rounded-full bg-slate-700 px-1.5 py-0.5 text-xs text-white">
+                    {savedResults.length}
+                  </span>
+                </button>
+              </nav>
+            </div>
+            <SavedResultsPanel
+              savedResultsLoading={savedResultsLoading}
+              fetchSavedResultsList={fetchSavedResultsList}
+              savedResults={savedResults}
+              selectedSavedFileName={selectedSavedFileName}
+              setSelectedSavedFileName={setSelectedSavedFileName}
+              setSelectedSavedMeta={setSelectedSavedMeta}
+              savedResultLoading={savedResultLoading}
+              selectedSavedPayload={selectedSavedPayload}
+              selectedSavedMeta={selectedSavedMeta}
+              savedLatestLapResults={savedLatestLapResults}
+              savedMonitoringPointRows={savedMonitoringPointRows}
               speedUnit={speedUnit}
               toggleSpeedUnit={toggleSpeedUnit}
             />
+          </>
+        ) : (
+          <>
+            <div className="relative pt-3">
+              <div className="absolute left-1/2 top-6 z-20 -translate-x-1/2">
+                <nav className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("live")}
+                    className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                      activeTab === "live"
+                        ? "bg-slate-100 text-slate-900"
+                        : "text-slate-300 hover:bg-slate-700/60 hover:text-white"
+                    }`}
+                  >
+                    Live Monitor
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("saved");
+                      fetchSavedResultsList();
+                    }}
+                    className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                      activeTab === "saved"
+                        ? "bg-slate-100 text-slate-900"
+                        : "text-slate-300 hover:bg-slate-700/60 hover:text-white"
+                    }`}
+                  >
+                    <span>Saved Results</span>
+                    {activeTab === "saved" ? (
+                      <span
+                        className={`ml-2 inline-flex min-w-6 items-center justify-center rounded-full px-1.5 py-0.5 text-xs ${
+                          activeTab === "saved" ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-600"
+                        }`}
+                      >
+                        {savedResults.length}
+                      </span>
+                    ) : null}
+                  </button>
+                </nav>
+              </div>
+              <RaceTimerPanel
+                raceClockDisplay={raceClockDisplay}
+                timerStateLabel={timerStateLabel}
+                hostStartSensorNanos={hostStartSensorNanos}
+                hostSplitMarks={hostSplitMarks}
+                hostStopSensorNanos={hostStopSensorNanos}
+                monitoringPointRows={monitoringHistoryRows}
+                speedUnit={speedUnit}
+                toggleSpeedUnit={toggleSpeedUnit}
+                withFloatingTabs
+              />
+            </div>
 
             <MonitoringControls
               refreshing={refreshing}

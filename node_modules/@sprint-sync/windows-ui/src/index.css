@@ -23,6 +23,16 @@ body {
   color: var(--app-fg);
 }
 
+/* Hide scrollbars app-wide while keeping scroll functionality */
+* {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
+
 /* Global grayscale remap for existing utility-based styling */
 .bg-white,
 .bg-amber-50\/95,

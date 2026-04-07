@@ -14,6 +14,8 @@ type RaceTimerPanelProps = {
   monitoringPointRows: Array<{ lap: any; pointSpeedMps: number | null; accelerationMps2: number | null }>;
   speedUnit: string;
   toggleSpeedUnit: () => void;
+  mergeWithHeader?: boolean;
+  withFloatingTabs?: boolean;
 };
 
 export default function RaceTimerPanel({
@@ -25,9 +27,15 @@ export default function RaceTimerPanel({
   monitoringPointRows,
   speedUnit,
   toggleSpeedUnit,
+  mergeWithHeader = false,
+  withFloatingTabs = false,
 }: RaceTimerPanelProps) {
   return (
-    <section className="rounded-2xl border border-slate-900 bg-slate-900 p-6 text-white shadow-lg">
+    <section
+      className={`border border-slate-900 bg-slate-900 p-6 text-white shadow-lg ${
+        mergeWithHeader ? "rounded-b-2xl rounded-t-none border-t-0" : "rounded-2xl"
+      } ${withFloatingTabs ? "pt-20" : ""}`}
+    >
       <div className="space-y-5">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Race Timer</p>
@@ -59,8 +67,8 @@ export default function RaceTimerPanel({
                     key={`timer-result-${lap.id ?? `${checkpointLabel}-${index}-${lap.elapsedNanos}`}`}
                     className="min-w-[360px] flex-1 rounded-lg border border-slate-500 bg-slate-100 px-4 py-4 text-white"
                   >
-                    <div className="mt-4 grid min-h-[170px] grid-rows-[0.75fr_auto_2.25fr]">
-                      <div className="flex flex-col justify-center">
+                    <div className="mt-4 grid min-h-[170px] grid-rows-[1fr_auto_2fr]">
+                      <div className="flex flex-col items-center justify-center text-center">
                         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8ea2bf]">{checkpointLabel}</p>
                         <p className="mt-2 font-mono text-4xl font-semibold leading-none text-slate-400 md:text-5xl">
                           {formatMeters(lap.distanceMeters)}
@@ -71,13 +79,13 @@ export default function RaceTimerPanel({
 
                       <div className="flex items-center justify-center">
                         <p className="inline-flex w-full items-baseline justify-center gap-1.5 text-center font-mono leading-none">
-                          <span className="inline-flex items-baseline text-7xl font-black text-white md:text-8xl">
+                          <span className="inline-flex items-baseline text-8xl font-black leading-[0.9] text-white md:text-9xl">
                             <span>{timeLeft}</span>
                             {hasDecimal ? <span className="mx-[-0.08em]">.</span> : null}
                             {hasDecimal ? <span>{timeRight}</span> : null}
                           </span>
                           {hasSecondsSuffix ? (
-                            <span className="text-5xl font-semibold text-slate-400 md:text-6xl">s</span>
+                            <span className="text-6xl font-semibold leading-[0.9] text-slate-400 md:text-7xl">s</span>
                           ) : null}
                         </p>
                       </div>
