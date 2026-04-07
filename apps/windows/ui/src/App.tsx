@@ -203,6 +203,7 @@ export default function App() {
   const [selectedSavedFileName, setSelectedSavedFileName] = useState("");
   const [selectedSavedMeta, setSelectedSavedMeta] = useState(null);
   const [selectedSavedPayload, setSelectedSavedPayload] = useState(null);
+  const [runHistory, setRunHistory] = useState<Array<{ key: string; rows: any[] }>>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [raceClockTickMs, setRaceClockTickMs] = useState(() => Date.now());
   const raceClockBaseMsRef = useRef(null);
@@ -612,6 +613,67 @@ export default function App() {
   const monitoringPointRows = useMemo(() => buildMonitoringPointRows(latestLapResults), [latestLapResults]);
 
   useEffect(() => {
+    if (
+      hostStartSensorNanos === null ||
+      hostStopSensorNanos === null ||
+      hostStopSensorNanos <= hostStartSensorNanos ||
+      monitoringPointRows.length === 0
+    ) {
+      return;
+    }
+
+    const runKey = `${hostStartSensorNanos}-${hostStopSensorNanos}`;
+    setRunHistory((previous) => {
+      if (previous.some((entry) => entry.key === runKey)) {
+        return previous;
+      }
+
+      const snapshotRows = monitoringPointRows.map((row) => ({
+        ...row,
+        lap: row?.lap && typeof row.lap === "object" ? { ...row.lap } : row?.lap,
+      }));
+
+      return [...previous, { key: runKey, rows: snapshotRows }];
+    });
+  }, [hostStartSensorNanos, hostStopSensorNanos, monitoringPointRows]);
+
+  const monitoringHistoryRows = useMemo(() => {
+    const rowsFromHistory = runHistory.flatMap((entry, runIndex) =>
+      entry.rows.map((row) => {
+        const checkpointLabel = row?.lap?.roleLabel ?? row?.lap?.senderDeviceName ?? "Checkpoint";
+        return {
+          ...row,
+          lap: {
+            ...(row?.lap ?? {}),
+            roleLabel: `Run ${runIndex + 1} · ${checkpointLabel}`,
+          },
+        };
+      }),
+    );
+
+    const currentRunInProgress =
+      hostStartSensorNanos !== null && hostStopSensorNanos === null && monitoringPointRows.length > 0;
+
+    if (!currentRunInProgress) {
+      return rowsFromHistory.length > 0 ? rowsFromHistory : monitoringPointRows;
+    }
+
+    const currentRunIndex = runHistory.length + 1;
+    const liveRows = monitoringPointRows.map((row) => {
+      const checkpointLabel = row?.lap?.roleLabel ?? row?.lap?.senderDeviceName ?? "Checkpoint";
+      return {
+        ...row,
+        lap: {
+          ...(row?.lap ?? {}),
+          roleLabel: `Run ${currentRunIndex} · ${checkpointLabel}`,
+        },
+      };
+    });
+
+    return [...rowsFromHistory, ...liveRows];
+  }, [runHistory, hostStartSensorNanos, hostStopSensorNanos, monitoringPointRows]);
+
+  useEffect(() => {
     const runStopped =
       hostStartSensorNanos !== null && hostStopSensorNanos !== null && hostStopSensorNanos > hostStartSensorNanos;
     if (!monitoringActive || hostStartSensorNanos === null || runStopped) {
@@ -718,7 +780,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
+    <div className="min-h-screen bg-black text-slate-900">
       <main className="flex w-full flex-col md:flex-row">
         <aside
           className={`w-full shrink-0 border-r border-slate-200 bg-white shadow-sm transition-all duration-200 md:sticky md:top-0 md:h-screen ${
@@ -803,7 +865,7 @@ export default function App() {
               hostStartSensorNanos={hostStartSensorNanos}
               hostSplitMarks={hostSplitMarks}
               hostStopSensorNanos={hostStopSensorNanos}
-              monitoringPointRows={monitoringPointRows}
+              monitoringPointRows={monitoringHistoryRows}
               speedUnit={speedUnit}
               toggleSpeedUnit={toggleSpeedUnit}
             />
@@ -828,15 +890,57 @@ export default function App() {
               formatIsoTime={formatIsoTime}
             />
 
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-              <Card
-                title={monitoringActive ? "Monitoring Devices" : "Connected Devices"}
-                subtitle={
-                  monitoringActive
+            <div className="space-y-4">
+              <details open className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <summary className="cursor-pointer text-sm font-semibold uppercase tracking-wide text-slate-700">
+                  {monitoringActive ? "Monitoring Results" : "Latest Lap Results"}
+                </summary>
+                <p className="mt-2 mb-3 text-xs text-slate-500">Distance checkpoints with time, speed at point, and acceleration</p>
+                {latestLapResults.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    No monitoring results recorded yet. Fire Start and Stop triggers (with splits if needed) to generate results.
+                  </p>
+                ) : (
+                  <div className="overflow-auto">
+                    <table className="min-w-full text-left text-sm">
+                      <thead className="text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="pb-2 pr-3">Distance</th>
+                          <th className="pb-2 pr-3">Time</th>
+                          <th className="pb-2 pr-3">Speed</th>
+                          <th className="pb-2">Acceleration (m/s^2)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {monitoringPointRows.map(({ lap, pointSpeedMps, accelerationMps2 }) => {
+                          return (
+                            <tr key={lap.id}>
+                              <td className="py-2 pr-3 text-slate-700">{formatMeters(lap.distanceMeters)}</td>
+                              <td className="py-2 pr-3 font-mono text-slate-900">{formatDurationNanos(lap.elapsedNanos)}</td>
+                              <td className="py-2 pr-3 text-slate-700">
+                                <button type="button" onClick={toggleSpeedUnit} className="font-mono">
+                                  {formatSpeedWithUnit(pointSpeedMps, speedUnit)}
+                                </button>
+                              </td>
+                              <td className="py-2 text-slate-700">{formatAcceleration(accelerationMps2)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </details>
+
+              <details open className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <summary className="cursor-pointer text-sm font-semibold uppercase tracking-wide text-slate-700">
+                  {monitoringActive ? "Monitoring Devices" : "Connected Devices"}
+                </summary>
+                <p className="mt-2 mb-3 text-xs text-slate-500">
+                  {monitoringActive
                     ? "Roles are locked while monitoring. Camera, sensitivity, and distance settings remain editable."
-                    : "Assign roles and configure camera, sensitivity, and physical distance per device."
-                }
-              >
+                    : "Assign roles and configure camera, sensitivity, and physical distance per device."}
+                </p>
                 {clients.length === 0 ? (
                   <p className="text-sm text-slate-500">No peers connected yet.</p>
                 ) : (
@@ -899,51 +1003,7 @@ export default function App() {
                     })}
                   </div>
                 )}
-              </Card>
-
-              <Card
-                title={monitoringActive ? "Monitoring Results" : "Latest Lap Results"}
-                subtitle="Distance checkpoints with time, speed at point, and acceleration"
-              >
-                {latestLapResults.length === 0 ? (
-                  <p className="text-sm text-slate-500">
-                    No monitoring results recorded yet. Fire Start and Stop triggers (with splits if needed) to generate results.
-                  </p>
-                ) : (
-                  <div className="overflow-auto">
-                    <table className="min-w-full text-left text-sm">
-                      <thead className="text-xs uppercase tracking-wide text-slate-500">
-                        <tr>
-                          <th className="pb-2 pr-3">Distance</th>
-                          <th className="pb-2 pr-3">Time</th>
-                          <th className="pb-2 pr-3">Speed</th>
-                          <th className="pb-2">Acceleration (m/s^2)</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {monitoringPointRows.map(({ lap, pointSpeedMps, accelerationMps2 }) => {
-                          return (
-                            <tr key={lap.id}>
-                              <td className="py-2 pr-3 text-slate-700">{formatMeters(lap.distanceMeters)}</td>
-                              <td className="py-2 pr-3 font-mono text-slate-900">{formatDurationNanos(lap.elapsedNanos)}</td>
-                              <td className="py-2 pr-3 text-slate-700">
-                                <button
-                                  type="button"
-                                  onClick={toggleSpeedUnit}
-                                  className="font-mono"
-                                >
-                                  {formatSpeedWithUnit(pointSpeedMps, speedUnit)}
-                                </button>
-                              </td>
-                              <td className="py-2 text-slate-700">{formatAcceleration(accelerationMps2)}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </Card>
+              </details>
             </div>
 
             <SystemDetails

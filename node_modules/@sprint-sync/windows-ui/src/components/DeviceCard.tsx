@@ -57,24 +57,41 @@ export default function DeviceCard({
       <div className="text-sm font-semibold text-slate-900">{client.deviceName ?? "Unknown device"}</div>
       <div className="mb-2 font-mono text-xs text-slate-500">{targetId}</div>
 
-      {monitoringActive ? (
-        <p className="rounded border border-slate-200 bg-white px-2 py-2 text-sm text-slate-700">Role: {assignedRole}</p>
-      ) : (
-        <select
-          className="w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm"
-          value={assignedRole}
-          disabled={busyAction === actionKey}
-          onChange={(event) => assignRole(targetId, event.target.value)}
-        >
-          {clientRoleOptions.map((role) => (
-            <option key={role} value={role}>
-              {role}
-            </option>
-          ))}
-        </select>
-      )}
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Role
+          {monitoringActive ? (
+            <p className="mt-1 rounded border border-slate-200 bg-white px-2 py-2 text-center text-sm text-slate-700">{assignedRole}</p>
+          ) : (
+            <select
+              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-center text-sm"
+              value={assignedRole}
+              disabled={busyAction === actionKey}
+              onChange={(event) => assignRole(targetId, event.target.value)}
+            >
+              {clientRoleOptions.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
+          )}
+        </label>
 
-      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Distance (m)
+          <input
+            type="number"
+            min={0}
+            max={100000}
+            step={0.1}
+            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-center text-sm text-slate-700"
+            value={distanceDraft}
+            disabled={busyAction === distanceActionKey}
+            onChange={(event) => updateDistanceDraft(targetId, event.target.value, effectiveDistance)}
+          />
+        </label>
+
         <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
           Camera
           <button
@@ -94,24 +111,10 @@ export default function DeviceCard({
             min={1}
             max={100}
             step={1}
-            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm text-slate-700"
+            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-center text-sm text-slate-700"
             value={sensitivityDraft}
             disabled={busyAction === sensitivityActionKey}
             onChange={(event) => updateSensitivityDraft(targetId, event.target.value, effectiveSensitivity)}
-          />
-        </label>
-
-        <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Distance (m)
-          <input
-            type="number"
-            min={0}
-            max={100000}
-            step={0.1}
-            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm text-slate-700"
-            value={distanceDraft}
-            disabled={busyAction === distanceActionKey}
-            onChange={(event) => updateDistanceDraft(targetId, event.target.value, effectiveDistance)}
           />
         </label>
       </div>
