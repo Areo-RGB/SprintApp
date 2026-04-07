@@ -22,6 +22,7 @@ import androidx.lifecycle.lifecycleScope
 import com.paul.sprintsync.core.models.SavedRunResult
 import com.paul.sprintsync.core.models.SavedRunCheckpointResult
 import com.paul.sprintsync.core.repositories.LocalRepository
+import com.paul.sprintsync.core.services.AppUpdateChecker
 import com.paul.sprintsync.core.services.SessionConnectionEvent
 import com.paul.sprintsync.core.services.SessionConnectionStrategy
 import com.paul.sprintsync.core.services.SessionConnectionsManager
@@ -73,6 +74,8 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
 
     private lateinit var sensorNativeController: SensorNativeController
     private lateinit var connectionsManager: SessionConnectionsManager
+    private lateinit var appUpdateChecker: AppUpdateChecker
+    private var pendingApkUrl: String? = null
     private lateinit var motionDetectionController: MotionDetectionController
     private lateinit var raceSessionController: RaceSessionController
     private lateinit var previewViewFactory: SensorNativePreviewViewFactory
@@ -116,6 +119,25 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         sensorNativeController = SensorNativeController(this)
         localRepository = LocalRepository(this)
+        appUpdateChecker = AppUpdateChecker(this)
+
+        lifecycleScope.launch {
+            val update = appUpdateChecker.checkForUpdate(
+                updateCheckUrl = BuildConfig.UPDATE_CHECK_URL,
+                currentVersionCode = BuildConfig.VERSION_CODE,
+            )
+            if (update != null) {
+                pendingApkUrl = update.apkUrl
+                updateUiState {
+                    copy(
+                        updateAvailable = true,
+                        updateVersionName = update.versionName,
+                        updateReleaseNotes = update.releaseNotes,
+                    )
+                }
+            }
+        }
+
         val nativeClockSyncElapsedNanos: (Boolean) -> Long? = { requireSensorDomain ->
             sensorNativeController.currentClockSyncElapsedNanos(
                 maxSensorSampleAgeNanos = SENSOR_ELAPSED_PROJECTION_MAX_AGE_NANOS,
@@ -732,8 +754,23 @@ class MainActivity : ComponentActivity(), ActivityCompat.OnRequestPermissionsRes
                             }
                         }
                     },
+                    onDismissUpdate = {
+                        updateUiState { copy(updateAvailable = false) }
+                    },
+                    onDownloadUpdate = {
+                        val url = pendingApkUrl ?: return@SprintSyncApp
+                        updateUiState { copy(updateDownloading = true) }
+                        lifecycleScope.launch {
+                            val success = appUpdateChecker.downloadAndInstall(url)
+                            updateUiState { copy(updateDownloading = false, updateAvailable = false) }
+                            if (!success) {
+                                appendEvent("Update download failed")
+                            }
+                        }
+                    },
                 )
             }
+
         }
 
         if (!isTabletRoleChoiceDevice && BuildConfig.AUTO_START_ROLE != "none") {

@@ -18,6 +18,8 @@
     "rebuild:debug:device-flavors:adb": "npm run rebuild:debug:devices:adb",
     "install:release:devices": "node scripts/install-release-apk.mjs",
     "rebuild:release:devices": "npm run build:release:apk && node scripts/install-release-apk.mjs",
+    "install:release:devices:adb": "node scripts/install-release-devices-adb.mjs",
+    "rebuild:release:devices:adb": "npm run build:release:apk && npm run install:release:devices:adb",
     "install:debug:devices:build": "npm run rebuild:debug:devices",
     "android:build:install:start": "npm run rebuild:debug:devices:adb",
     "windows:install": "npm install --workspaces --include-workspace-root",
@@ -34,9 +36,13 @@
     "windows:package:desktop:build-tools": "cmd.exe /c \"\\\"C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat\\\" && npm run windows:package:desktop\"",
     "windows:package:exe": "npm run windows:package:desktop",
     "windows:package:start:exe": "npm run windows:package:desktop && cmd.exe /c start \"\" \"%cd%\\apps\\windows\\desktop-tauri\\src-tauri\\target\\release\\sprint-sync-windows-desktop-tauri.exe\"",
-    "run:android-and-exe": "npm run rebuild:debug:devices:adb && npm run windows:package:start:exe"
+    "run:android-and-exe": "npm run rebuild:debug:devices:adb && npm run windows:package:start:exe",
+    "release:android": "node scripts/release-android.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
+  },
+  "dependencies": {
+    "context-mode": "^1.0.75"
   }
 }

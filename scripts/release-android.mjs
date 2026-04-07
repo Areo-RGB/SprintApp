@@ -1,11 +1,20 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
+import { fileURLToPath } from 'url';
 
-const buildGradlePath = path.join(process.cwd(), 'apps', 'android', 'app', 'build.gradle.kts');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootDir = path.resolve(__dirname, '..');
+const buildGradlePath = path.join(rootDir, 'apps', 'android', 'app', 'build.gradle.kts');
 
 function run() {
   console.log('Reading build.gradle.kts...');
+  if (!fs.existsSync(buildGradlePath)) {
+    console.error(`Could not find build.gradle.kts at ${buildGradlePath}`);
+    process.exit(1);
+  }
+
   let gradleContent = fs.readFileSync(buildGradlePath, 'utf8');
 
   // Parse versionCode
@@ -54,28 +63,39 @@ function run() {
 
   try {
     // Build release APK
-    console.log('\\nBuilding release APK...');
-    execSync('npm run build:release:apk', { stdio: 'inherit' });
+    console.log('\nBuilding release APK...');
+    execSync('npm run build:release:apk', { stdio: 'inherit', cwd: rootDir });
 
-    // Ensure the APK exists
-    const apkPath = path.join(process.cwd(), 'apps', 'android', 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk');
+    // Check if the APK exists
+    const apkPath = path.join(rootDir, 'apps', 'android', 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk');
     if (!fs.existsSync(apkPath)) {
-      console.error(`\\nError: APK not found at ${apkPath}`);
+      console.error(`\nError: APK not found at expected path: ${apkPath}`);
       process.exit(1);
     }
+    console.log(`APK built successfully at: ${apkPath}`);
+
+    // IMPORTANT: It's best to commit the version bump before creating the GitHub release,
+    // so the tag is created on the commit containing the bumped versions.
+    console.log('\nCommitting version bump locally...');
+    execSync(`git add "${buildGradlePath}"`, { stdio: 'inherit', cwd: rootDir });
+    execSync(`git commit -m "chore: bump android version to v${newVersionCode} (${newVersionName})"`, { stdio: 'inherit', cwd: rootDir });
+
+    console.log('\nPushing changes to remote...');
+    execSync('git push', { stdio: 'inherit', cwd: rootDir });
 
     // Create GitHub release
     const tagName = `v${newVersionCode}`;
     const releaseTitle = `Release ${tagName} (${newVersionName})`;
 
-    console.log(`\\nCreating GitHub Release for tag ${tagName}...`);
+    console.log(`\nCreating GitHub Release for tag ${tagName}...`);
     // Create the tag and release, uploading the APK
     const ghCmd = `gh release create ${tagName} "${apkPath}" --title "${releaseTitle}" --generate-notes`;
-    execSync(ghCmd, { stdio: 'inherit' });
+    execSync(ghCmd, { stdio: 'inherit', cwd: rootDir });
 
-    console.log('\\nRelease created successfully!');
+    console.log('\nRelease created successfully!');
+    console.log(`https://github.com/Areo-RGB/SprintApp/releases/tag/${tagName}`);
   } catch (error) {
-    console.error('\\nAn error occurred during the release process:');
+    console.error('\nAn error occurred during the release process:');
     console.error(error.message);
     process.exit(1);
   }
