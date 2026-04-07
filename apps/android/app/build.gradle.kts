@@ -30,8 +30,8 @@ android {
         applicationId = "sync.sprint"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("boolean", "TCP_ONLY", "true")
         buildConfigField("String", "TCP_HOST_IP", defaultTcpHostIp)
@@ -39,6 +39,7 @@ android {
         buildConfigField("String", "AUTO_START_ROLE", "\"none\"")
         buildConfigField("String", "DEVICE_PROFILE", "\"default\"")
         buildConfigField("boolean", "HOST_CONTROLLER_ONLY", "false")
+        buildConfigField("String", "UPDATE_CHECK_URL", "\"https://api.github.com/repos/Areo-RGB/SprintApp/releases/latest\"")
         resValue("string", "app_name", "Sprint Sync")
     }
 
