@@ -1,0 +1,64 @@
+# Miscellaneous
+.agents/
+.claude/
+.codex/
+.github/
+.gitnexus/
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+.codex
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+.github
+# Build and tooling artifacts
+**/doc/api/
+/build/
+/coverage/
+.env
+# Symbolication related
+app.*.symbols
+.gitnexus
+# Obfuscation related
+app.*.map.json
+.agents .claude .github .codex .gitnexus .idea .serena .vscode openspec .gitignore
+# Android Studio will place build artifacts here
+/apps/android/app/debug
+/apps/android/app/profile
+/apps/android/app/release
+/apps/android/build/
+/apps/android/app/build/
+# Root Gradle build output (apps/android module has its own .gitignore)
+/build/
+/.gradle/
+/gradle/wrapper/gradle-wrapper.jar
+.gitnexus
+.claude/
+.serena/
+.seren/
+.serena/memories/
+apps/windows/node_modules
+apps/windows/backend/node_modules
+apps/windows/backend/dist
+apps/windows/desktop/dist
+apps/windows/desktop/build
+apps/windows/ui/dist
+.agents
+/.agents
+Neo4j-*-Created-*.txt

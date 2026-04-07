@@ -1,0 +1,14 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run debug unit tests",
+			"type": "shell",
+			"command": "./gradlew",
+			"args": [
+				":app:testDebugUnitTest"
+			],
+			"isBackground": false
+		}
+	]
+}
