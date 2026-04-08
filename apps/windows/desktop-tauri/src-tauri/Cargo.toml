@@ -1,6 +1,6 @@
 [package]
 name = "sprint-sync-windows-desktop-tauri"
-version = "0.1.2"
+version = "0.1.3"
 description = "Tauri Windows host for Sprint Sync"
 edition = "2021"
 
