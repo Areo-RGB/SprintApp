@@ -1,6 +1,6 @@
 import re
 
-path = "apps/android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt"
+path = "android/app/src/main/kotlin/com/paul/sprintsync/SprintSyncApp.kt"
 with open(path, "r", encoding="utf-8") as f:
     text = f.read()
 

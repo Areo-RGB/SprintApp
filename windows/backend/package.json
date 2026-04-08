@@ -1,0 +1,30 @@
+{
+  "name": "@sprint-sync/windows-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "npm run typecheck",
+    "build:dist": "node scripts/package-exe.mjs",
+    "build:exe": "npm run build:dist",
+    "package": "npm run build:dist",
+    "package:exe": "npm run build:dist"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "flatbuffers": "^25.9.23",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.23",
+    "@types/node": "^22.13.10",
+    "@types/ws": "^8.5.15",
+    "esbuild": "^0.25.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3"
+  }
+}

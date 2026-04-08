@@ -7,13 +7,13 @@
     "target": "ES2022"
   },
   "include": [
-    "apps/windows/backend/src/**/*.ts",
-    "apps/windows/ui/src/**/*.{js,jsx,ts,tsx}"
+    "windows/backend/src/**/*.ts",
+    "windows/ui/src/**/*.{js,jsx,ts,tsx}"
   ],
   "exclude": [
     "node_modules",
-    "apps/android",
-    "apps/windows/**/dist",
-    "apps/windows/**/build"
+    "android",
+    "windows/**/dist",
+    "windows/**/build"
   ]
 }

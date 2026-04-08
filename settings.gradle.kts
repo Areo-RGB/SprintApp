@@ -5,7 +5,7 @@
  * enabling full Kotlin semantic indexing alongside the existing JavaScript/Node.js support.
  *
  * The Android module retains its own settings.gradle.kts for standalone builds
- * (e.g., via `cd apps/android && ./gradlew assembleDebug`), but this root file lets
+ * (e.g., via `cd android && ./gradlew assembleDebug`), but this root file lets
  * the IDE load everything in a single window.
  */
 
@@ -31,4 +31,4 @@ plugins {
 rootProject.name = "photo-finish-tcp-device-apks"
 
 // Include the Android app module
-includeBuild("apps/android")
+includeBuild("android")

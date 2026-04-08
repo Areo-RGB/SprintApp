@@ -3,13 +3,13 @@
   "private": true,
   "packageManager": "pnpm@10.30.1",
   "workspaces": [
-    "apps/windows/backend",
-    "apps/windows/ui",
-    "apps/windows/desktop-tauri"
+    "windows/backend",
+    "windows/ui",
+    "windows/desktop-tauri"
   ],
   "scripts": {
-    "build:debug:apk": "cmd.exe /c \"cd /d apps\\android && gradlew.bat :app:assembleDebug\"",
-    "build:release:apk": "cmd.exe /c \"cd /d apps\\android && gradlew.bat :app:assembleRelease\"",
+    "build:debug:apk": "cmd.exe /c \"cd /d android && gradlew.bat :app:assembleDebug\"",
+    "build:release:apk": "cmd.exe /c \"cd /d android && gradlew.bat :app:assembleRelease\"",
     "rebuild:debug:devices": "npm run build:debug:apk && node scripts/install-debug-apk.mjs",
     "install:debug:devices:adb": "node scripts/install-debug-devices-adb.mjs",
     "rebuild:debug:devices:adb": "npm run build:debug:apk && npm run install:debug:devices:adb",
@@ -29,7 +29,7 @@
     "windows:dev:ui": "npm run dev --workspace @sprint-sync/windows-ui",
     "windows:build": "npm run build --workspace @sprint-sync/windows-ui && npm run build --workspace @sprint-sync/windows-backend",
     "windows:start": "npm run start --workspace @sprint-sync/windows-backend",
-    "windows:start:exe": "cmd.exe /c start \"\" \"%cd%\\apps\\windows\\desktop-tauri\\src-tauri\\target\\release\\sprint-sync-windows-desktop-tauri.exe\"",
+    "windows:start:exe": "cmd.exe /c start \"\" \"%cd%\\windows\\desktop-tauri\\src-tauri\\target\\release\\sprint-sync-windows-desktop-tauri.exe\"",
     "windows:kill:port:9000": "node scripts/windows-kill-port-9000.mjs",
     "windows:preview:ui": "npm run preview --workspace @sprint-sync/windows-ui",
     "windows:package:backend": "npm install --include=optional && npm run build --workspace @sprint-sync/windows-ui && npm run package --workspace @sprint-sync/windows-backend",
