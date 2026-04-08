@@ -213,7 +213,7 @@ export default function SavedResultsPanel({
   return (
     <div className="flex gap-4">
       <aside
-        className={`shrink-0 overflow-hidden border-[3px] border-black bg-white transition-all duration-200 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${
+        className={`shrink-0 overflow-hidden border-[3px] border-black bg-white transition-all duration-200 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
           isSidebarOpen ? "w-80" : "w-14"
         }`}
       >
@@ -221,7 +221,7 @@ export default function SavedResultsPanel({
           <button
             type="button"
             onClick={() => setIsSidebarOpen((previous) => !previous)}
-            className="w-full border-[2px] border-black bg-white px-2 py-2 text-xs font-bold uppercase tracking-widest text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+            className="w-full border-[2px] border-black bg-white px-2 py-2 text-xs font-bold uppercase tracking-widest text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
           >
             {isSidebarOpen ? "COLLAPSE" : "SAVED"}
           </button>
@@ -249,8 +249,8 @@ export default function SavedResultsPanel({
                       }}
                       className={`w-full border-[3px] border-black px-4 py-3 text-left transition-all ${
                         item.fileName === selectedSavedFileName
-                          ? "bg-black text-[#FFEA00] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]"
-                          : "bg-white text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100 hover:translate-y-[-2px] hover:shadow-[4px_6px_0px_0px_rgba(0,0,0,1)]"
+                          ? "bg-black text-[#FFEA00] shadow-[1px_1px_0px_0px_rgba(0,0,0,0.2)]"
+                          : "bg-white text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100 hover:translate-y-[-2px] hover:shadow-[2px_3px_0px_0px_rgba(0,0,0,1)]"
                       }`}
                     >
                       <div className="text-sm font-bold uppercase tracking-wider">{item.resultName ?? item.fileName}</div>
@@ -272,7 +272,7 @@ export default function SavedResultsPanel({
       </aside>
 
       <div className="min-w-0 flex-1">
-        <section className="border-[3px] border-black bg-white p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+        <section className="border-[3px] border-black bg-white p-6 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
           {savedResultLoading ? (
             <p className="text-sm font-bold uppercase tracking-widest text-black">Loading saved result...</p>
           ) : !selectedSavedPayload ? (
@@ -283,17 +283,17 @@ export default function SavedResultsPanel({
             <div className="space-y-6">
               {comparisonChartData ? (
                 <div className="space-y-6">
-                  <div className="h-[38rem] border-[4px] border-black bg-white p-4 shadow-[inset_4px_4px_0px_0px_rgba(0,0,0,0.05)] bg-[linear-gradient(to_right,#000_1px,transparent_1px),linear-gradient(to_bottom,#000_1px,transparent_1px)] bg-[size:2rem_2rem]">
+                  <div className="h-[38rem] border-[4px] border-black bg-white p-4 shadow-[inset_2px_2px_0px_0px_rgba(0,0,0,0.05)] bg-[linear-gradient(to_right,#000_1px,transparent_1px),linear-gradient(to_bottom,#000_1px,transparent_1px)] bg-[size:2rem_2rem]">
                     <div className="h-full w-full bg-white/90 backdrop-blur-sm p-2 border-2 border-black">
                       <Line data={comparisonChartData} options={comparisonChartOptions} />
                     </div>
                   </div>
 
-                  <div className="border-[3px] border-black bg-white p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="border-[3px] border-black bg-white p-4 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                     <button
                       type="button"
                       onClick={() => setIsDataTableOpen((previous) => !previous)}
-                      className="border-[2px] border-black bg-black px-4 py-2 text-sm font-bold uppercase tracking-widest text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)] hover:bg-gray-800"
+                      className="border-[2px] border-black bg-black px-4 py-2 text-sm font-bold uppercase tracking-widest text-white shadow-[1px_1px_0px_0px_rgba(0,0,0,0.2)] hover:bg-gray-800"
                     >
                       {isDataTableOpen ? "HIDE DATA TABLE" : "SHOW DATA TABLE"}
                     </button>

@@ -54,7 +54,7 @@ export default function DeviceCard({
   requestDeviceClockResync,
 }: DeviceCardProps) {
   return (
-    <div key={client.endpointId} className="min-w-[320px] flex-1 border-[3px] border-black bg-white p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+    <div key={client.endpointId} className="min-w-[320px] flex-1 border-[3px] border-black bg-white p-4 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
       <div className="text-lg font-black uppercase tracking-tight text-black">{client.deviceName ?? "Unknown device"}</div>
       <div className="mb-4 font-mono text-xs font-bold text-gray-500">{targetId}</div>
 
@@ -62,10 +62,10 @@ export default function DeviceCard({
         <label className="text-xs font-bold uppercase tracking-wide text-black">
           Role
           {monitoringActive ? (
-            <p className="mt-1 border-[2px] border-black bg-gray-100 px-2 py-2 text-center text-sm font-bold uppercase text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">{assignedRole}</p>
+            <p className="mt-1 border-[2px] border-black bg-gray-100 px-2 py-2 text-center text-sm font-bold uppercase text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">{assignedRole}</p>
           ) : (
             <select
-              className="mt-1 w-full border-[2px] border-black bg-white px-2 py-2 text-center text-sm font-bold uppercase text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-2 focus:ring-[#FFEA00]"
+              className="mt-1 w-full border-[2px] border-black bg-white px-2 py-2 text-center text-sm font-bold uppercase text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-2 focus:ring-[#FFEA00]"
               value={assignedRole}
               disabled={busyAction === actionKey}
               onChange={(event) => assignRole(targetId, event.target.value)}
@@ -86,7 +86,7 @@ export default function DeviceCard({
             min={0}
             max={100000}
             step={0.1}
-            className="mt-1 w-full border-[2px] border-black bg-white px-2 py-2 text-center text-sm font-bold text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-2 focus:ring-[#FFEA00]"
+            className="mt-1 w-full border-[2px] border-black bg-white px-2 py-2 text-center text-sm font-bold text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-2 focus:ring-[#FFEA00]"
             value={distanceDraft}
             disabled={busyAction === distanceActionKey}
             onChange={(event) => updateDistanceDraft(targetId, event.target.value, effectiveDistance)}
@@ -97,7 +97,7 @@ export default function DeviceCard({
           Camera
           <button
             type="button"
-            className="mt-1 w-full border-[2px] border-black bg-white px-2 py-2 text-sm font-bold uppercase text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition hover:bg-gray-100 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+            className="mt-1 w-full border-[2px] border-black bg-white px-2 py-2 text-sm font-bold uppercase text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] transition hover:bg-gray-100 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
             disabled={busyAction === cameraActionKey}
             onClick={() => toggleCameraFacing(targetId, cameraFacing)}
           >
@@ -112,7 +112,7 @@ export default function DeviceCard({
             min={1}
             max={100}
             step={1}
-            className="mt-1 w-full border-[2px] border-black bg-white px-2 py-2 text-center text-sm font-bold text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-2 focus:ring-[#FFEA00]"
+            className="mt-1 w-full border-[2px] border-black bg-white px-2 py-2 text-center text-sm font-bold text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-2 focus:ring-[#FFEA00]"
             value={sensitivityDraft}
             disabled={busyAction === sensitivityActionKey}
             onChange={(event) => updateSensitivityDraft(targetId, event.target.value, effectiveSensitivity)}

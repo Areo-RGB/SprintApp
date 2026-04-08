@@ -3,29 +3,25 @@ import { deriveMonitoringElapsedMs } from "./raceClock.js";
 import {
   buildMonitoringPointRows,
   computeProgressiveRoleOptions,
-  formatAcceleration,
   formatDateForResultName,
   formatDurationNanos,
   formatIsoTime,
   formatMeters,
   formatRaceClockMs,
-  formatSpeedWithUnit,
   normalizeAthleteNameDraft,
   normalizeRoleOptions,
   roleOrderIndex,
   stageLabel,
 } from "./utils";
-import ActionButton from "./components/ActionButton";
 import Card from "./components/Card";
 import DeviceCard from "./components/DeviceCard";
-import MonitoringControls from "./components/MonitoringControls";
 import RaceTimerPanel from "./components/RaceTimerPanel";
 import SavedResultsPanel from "./components/SavedResultsPanel";
 import SystemDetails from "./components/SystemDetails";
 import { generateDemoRuns } from "./demoData";
 
 const AUTO_APPLY_DELAY_MS = 350;
-const DEV_UI_MOCK_MODE = import.meta.env.VITE_USE_DEV_MOCK === "true";
+const DEV_UI_MOCK_MODE = import.meta.env.DEV || import.meta.env.VITE_USE_DEV_MOCK === "true";
 
 function createDevMockSnapshot() {
   const now = Date.now();
@@ -384,10 +380,6 @@ export default function App() {
     postControl("/api/control/assign-role", { targetId, role }, `assign-role:${targetId}`);
   }
 
-  function fireTrigger(role: string) {
-    postControl("/api/control/trigger", { role }, `trigger:${role}`);
-  }
-
   function updateDeviceConfig(targetId: string, patch: any, actionKey: string) {
     postControl("/api/control/device-config", { targetId, ...patch }, actionKey);
   }
@@ -617,11 +609,6 @@ export default function App() {
     nowMs: raceClockTickMs,
   });
   const hostSplitMarks = Array.isArray(session.hostSplitMarks) ? session.hostSplitMarks : [];
-  const firedSplitRoles = new Set(
-    hostSplitMarks
-      .map((splitMark) => splitMark?.roleLabel)
-      .filter((roleLabel) => typeof roleLabel === "string"),
-  );
   const clients = snapshot?.clients ?? [];
   const latestLapResults = snapshot?.latestLapResults ?? [];
   const recentEvents = snapshot?.recentEvents ?? [];
@@ -643,7 +630,6 @@ export default function App() {
   const fallbackRoleOptions = useMemo(() => computeProgressiveRoleOptions(clients), [clients]);
   const serverRoleOptions = useMemo(() => normalizeRoleOptions(session.roleOptions), [session.roleOptions]);
   const roleOptions = serverRoleOptions.length > 0 ? serverRoleOptions : fallbackRoleOptions;
-  const triggerRoles = ["Start", "Split 1", "Split 2", "Split 3", "Split 4", "Stop"];
   const hasStartAssignment = clients.some((client: any) => client.assignedRole === "Start");
   const hasStopAssignment = clients.some((client: any) => client.assignedRole === "Stop");
   const canStartMonitoring = clients.length > 0 && hasStartAssignment && hasStopAssignment && !monitoringActive;
@@ -781,47 +767,6 @@ export default function App() {
     return formatRaceClockMs(Math.max(0, effectiveElapsedMs - baseMs));
   }, [hostStartSensorNanos, hostStopSensorNanos, monitoringActive, raceClockTickMs, monitoringElapsedMs]);
 
-  function triggerDisabled(roleLabel: string) {
-    if (!monitoringActive) {
-      return true;
-    }
-
-    if (roleLabel === "Start") {
-      return hostStartSensorNanos !== null;
-    }
-
-    if (roleLabel === "Stop") {
-      return hostStartSensorNanos === null || hostStopSensorNanos !== null;
-    }
-
-    const splitMatch = /^Split\s+(\d)$/i.exec(roleLabel);
-    if (!splitMatch) {
-      return false;
-    }
-
-    const splitIndex = Number(splitMatch[1]);
-    if (hostStartSensorNanos === null || hostStopSensorNanos !== null) {
-      return true;
-    }
-    if (firedSplitRoles.has(roleLabel)) {
-      return true;
-    }
-    if (splitIndex > 1 && !firedSplitRoles.has(`Split ${splitIndex - 1}`)) {
-      return true;
-    }
-    return false;
-  }
-
-  function triggerActive(roleLabel: string) {
-    if (roleLabel === "Start") {
-      return hostStartSensorNanos !== null && hostStopSensorNanos === null;
-    }
-    if (roleLabel === "Stop") {
-      return hostStopSensorNanos !== null;
-    }
-    return firedSplitRoles.has(roleLabel);
-  }
-
   function toggleSpeedUnit() {
     setSpeedUnit((previous) => (previous === "kmh" ? "mps" : "kmh"));
   }
@@ -831,7 +776,7 @@ export default function App() {
       <main className="flex w-full flex-col gap-4 px-2 pb-2 pt-0 md:px-3 md:pb-3 md:pt-0">
         <section className="space-y-4">
           {lastError ? (
-            <div className="border-[3px] border-black bg-[#FF1744] p-4 text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <div className="border-[3px] border-black bg-[#FF1744] p-4 text-white shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
               <p className="font-bold uppercase tracking-wide">Error</p>
               <p className="font-mono text-sm">{lastError}</p>
             </div>
@@ -840,7 +785,7 @@ export default function App() {
         {activeTab === "saved" ? (
           <>
             <div className="flex justify-center mt-4">
-              <nav className="inline-flex items-center gap-2 border-[3px] border-black bg-white p-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <nav className="inline-flex items-center gap-2 border-[3px] border-black bg-white p-1 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                 <button
                   type="button"
                   onClick={() => setActiveTab("live")}
@@ -879,121 +824,82 @@ export default function App() {
           </>
         ) : (
           <>
-            <div className="relative pt-3">
-              <div className="absolute left-1/2 top-6 z-20 -translate-x-1/2">
-                <nav className="inline-flex items-center gap-2 border-[3px] border-black bg-white p-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("live")}
-                    className={`px-6 py-2 text-sm font-bold uppercase tracking-widest transition-colors ${
-                      activeTab === "live"
-                        ? "bg-black text-[#FFEA00]"
-                        : "text-black hover:bg-gray-100"
-                    }`}
-                  >
-                    Live Monitor
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTab("saved");
-                      fetchSavedResultsList();
-                    }}
-                    className={`px-6 py-2 text-sm font-bold uppercase tracking-widest transition-colors ${
-                      activeTab === "saved"
-                        ? "bg-black text-[#FFEA00]"
-                        : "text-black hover:bg-gray-100"
-                    }`}
-                  >
-                    <span>Saved Results</span>
-                    {activeTab === "saved" ? (
-                      <span
-                        className={`ml-2 inline-flex min-w-6 items-center justify-center px-1.5 py-0.5 text-xs ${
-                          activeTab === "saved" ? "bg-[#FFEA00] text-black" : "bg-gray-200 text-black"
-                        }`}
-                      >
-                        {savedResults.length}
-                      </span>
-                    ) : null}
-                  </button>
-                </nav>
-              </div>
+            <div className="pt-3">
               <RaceTimerPanel
                 raceClockDisplay={raceClockDisplay}
                 timerStateLabel={timerStateLabel}
-                hostStartSensorNanos={hostStartSensorNanos}
-                hostSplitMarks={hostSplitMarks}
-                hostStopSensorNanos={hostStopSensorNanos}
-                monitoringPointRows={monitoringHistoryRows}
+                activeTab={activeTab}
+                onOpenSavedResults={() => {
+                  setActiveTab("saved");
+                  fetchSavedResultsList();
+                }}
+                busyAction={busyAction}
+                postControl={postControl}
+                canStartMonitoring={canStartMonitoring}
+                monitoringActive={monitoringActive}
+                saveResultsJson={saveResultsJson}
+                canSaveResults={canSaveResults}
+                monitoringPointRows={monitoringPointRows}
                 speedUnit={speedUnit}
                 toggleSpeedUnit={toggleSpeedUnit}
-                withFloatingTabs
               />
             </div>
 
-            <MonitoringControls
-              refreshing={refreshing}
-              fetchState={fetchState}
-              busyAction={busyAction}
-              postControl={postControl}
-              canStartMonitoring={canStartMonitoring}
-              monitoringActive={monitoringActive}
-              saveResultsJson={saveResultsJson}
-              canSaveResults={canSaveResults}
-              triggerRoles={triggerRoles}
-              fireTrigger={fireTrigger}
-              triggerDisabled={triggerDisabled}
-              triggerActive={triggerActive}
-              hasStartAssignment={hasStartAssignment}
-              hasStopAssignment={hasStopAssignment}
-              lastSavedFilePath={lastSavedFilePath}
-              lastSavedAtIso={lastSavedAtIso}
-              formatIsoTime={formatIsoTime}
-            />
-
             <div className="space-y-6">
-              <details open className="border-[3px] border-black bg-white p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+              <details open className="border-[3px] border-black bg-white p-5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                 <summary className="cursor-pointer text-sm font-bold uppercase tracking-widest text-black hover:text-[#FF1744] transition-colors">
-                  {monitoringActive ? "Monitoring Results" : "Latest Lap Results"}
+                  Display Results
                 </summary>
-                <p className="mt-3 mb-5 text-xs font-bold uppercase tracking-wide text-gray-600">Distance checkpoints with time, speed at point, and acceleration</p>
-                {latestLapResults.length === 0 ? (
-                  <p className="text-sm font-bold uppercase text-gray-500">
-                    No monitoring results recorded yet. Fire Start and Stop triggers (with splits if needed) to generate results.
-                  </p>
+                {monitoringHistoryRows.length === 0 ? (
+                  <div className="mt-4 border-[3px] border-black bg-gray-100 px-5 py-8 text-center text-lg font-bold uppercase text-gray-500 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                    Waiting for split/finish results...
+                  </div>
                 ) : (
-                  <div className="overflow-auto border-[2px] border-black">
-                    <table className="min-w-full text-left text-sm">
-                      <thead className="bg-[#FFEA00] text-xs font-bold uppercase tracking-widest text-black border-b-[2px] border-black">
-                        <tr>
-                          <th className="p-3 border-r-[2px] border-black">Distance</th>
-                          <th className="p-3 border-r-[2px] border-black">Time</th>
-                          <th className="p-3 border-r-[2px] border-black">Speed</th>
-                          <th className="p-3">Acceleration (m/s^2)</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y-[2px] divide-black bg-white">
-                        {monitoringPointRows.map(({ lap, pointSpeedMps, accelerationMps2 }) => {
-                          return (
-                            <tr key={lap.id}>
-                              <td className="p-3 border-r-[2px] border-black font-bold uppercase text-black">{formatMeters(lap.distanceMeters)}</td>
-                              <td className="p-3 border-r-[2px] border-black font-mono font-bold text-black">{formatDurationNanos(lap.elapsedNanos)}</td>
-                              <td className="p-3 border-r-[2px] border-black font-bold text-black">
-                                <button type="button" onClick={toggleSpeedUnit} className="font-mono hover:text-[#FF1744] transition-colors">
-                                  {formatSpeedWithUnit(pointSpeedMps ?? 0, speedUnit)}
-                                </button>
-                              </td>
-                              <td className="p-3 font-bold text-black">{formatAcceleration(accelerationMps2 ?? 0)}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                  <div className="mt-4 flex gap-4 overflow-x-auto pb-2">
+                    {monitoringHistoryRows.map(({ lap }, index) => {
+                      const checkpointLabel = lap.roleLabel ?? lap.senderDeviceName ?? `Checkpoint ${index + 1}`;
+                      const timeDisplay = formatDurationNanos(lap.elapsedNanos);
+                      const timeValue = timeDisplay.endsWith("s") ? timeDisplay.slice(0, -1) : timeDisplay;
+                      const hasSecondsSuffix = timeDisplay.endsWith("s");
+                      const [timeLeft, timeRight] = timeValue.split(".");
+                      const hasDecimal = typeof timeRight === "string" && timeRight.length > 0;
+
+                      return (
+                        <div
+                          key={`display-result-${lap.id ?? `${checkpointLabel}-${index}-${lap.elapsedNanos}`}`}
+                          className="min-w-[360px] flex-1 border-[3px] border-black bg-white px-5 py-5 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                        >
+                          <div className="mt-2 grid min-h-[170px] grid-rows-[1fr_auto_2fr]">
+                            <div className="flex flex-col items-center justify-center text-center">
+                              <p className="text-sm font-bold uppercase tracking-[0.2em] text-black">{checkpointLabel}</p>
+                              <p className="mt-2 font-mono text-4xl font-black leading-none text-black md:text-5xl">
+                                {formatMeters(lap.distanceMeters)}
+                              </p>
+                            </div>
+
+                            <div className="my-5 h-[3px] w-full bg-black" />
+
+                            <div className="flex items-center justify-center">
+                              <p className="inline-flex w-full items-baseline justify-center gap-1.5 text-center font-mono leading-none">
+                                <span className="inline-flex items-baseline text-7xl font-black leading-[0.9] text-black md:text-8xl">
+                                  <span>{timeLeft}</span>
+                                  {hasDecimal ? <span className="mx-[-0.08em]">.</span> : null}
+                                  {hasDecimal ? <span>{timeRight}</span> : null}
+                                </span>
+                                {hasSecondsSuffix ? (
+                                  <span className="text-5xl font-bold leading-[0.9] text-black md:text-6xl">s</span>
+                                ) : null}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </details>
 
-              <details open className="border-[3px] border-black bg-white p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+              <details open className="border-[3px] border-black bg-white p-5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                 <summary className="cursor-pointer text-sm font-bold uppercase tracking-widest text-black hover:text-[#FF1744] transition-colors">
                   {monitoringActive ? "Monitoring Devices" : "Connected Devices"}
                 </summary>
@@ -1078,7 +984,7 @@ export default function App() {
               snapshot={snapshot}
             />
 
-            <details className="border-[3px] border-black bg-white p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+            <details className="border-[3px] border-black bg-white p-5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
               <summary className="cursor-pointer text-sm font-bold uppercase tracking-widest text-black hover:text-[#FF1744] transition-colors">
                 Traffic and Events
               </summary>
@@ -1091,7 +997,7 @@ export default function App() {
                       {knownTypes.map(([name, count]) => (
                         <li
                           key={name}
-                          className="flex items-center justify-between border-[2px] border-black bg-gray-100 px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                          className="flex items-center justify-between border-[2px] border-black bg-gray-100 px-3 py-2 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
                         >
                           <span className="font-mono text-xs font-bold text-black">{name}</span>
                           <span className="bg-black px-2 py-0.5 text-xs font-bold text-white">{count}</span>
@@ -1107,7 +1013,7 @@ export default function App() {
                   ) : (
                     <ul className="max-h-80 space-y-3 overflow-auto text-sm pr-2">
                       {recentEvents.map((event: any) => (
-                        <li key={event.id} className="border-[2px] border-black bg-gray-100 px-4 py-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        <li key={event.id} className="border-[2px] border-black bg-gray-100 px-4 py-3 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                           <div className="flex items-center justify-between gap-3">
                             <span className="font-bold text-black">{event.message}</span>
                             <span className={`text-xs font-bold uppercase tracking-widest px-2 py-1 border-[2px] border-black ${event.level === 'error' ? 'bg-[#FF1744] text-white' : 'bg-white text-black'}`}>{event.level}</span>

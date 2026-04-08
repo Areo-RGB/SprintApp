@@ -21,7 +21,7 @@ export default function SystemDetails({
   snapshot,
 }: SystemDetailsProps) {
   return (
-    <details className="border-[3px] border-black bg-white p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+    <details className="border-[3px] border-black bg-white p-5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
       <summary className="cursor-pointer text-sm font-bold uppercase tracking-widest text-black hover:text-[#FF1744] transition-colors">
         System Details
       </summary>
