@@ -1,31 +1,15 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Space+Grotesk:wght@400;600;700&display=swap');
 @import "tailwindcss";
 
-:root {
-  --app-bg: #f4f4f0;
-  --app-fg: #000000;
-  --app-surface-1: #ffffff;
-  --app-surface-2: #ecece6;
-  --app-surface-3: #e2e2db;
-  --app-surface-4: #d6d6ce;
-  --app-border: #c9c9bf;
-  --app-muted: #4b5563;
+@theme {
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
-html,
-body,
-#root {
-  min-height: 100%;
-}
-
-body {
-  margin: 0;
-  background: var(--app-bg);
-  color: var(--app-fg);
-}
-
-::selection {
-  background: #ffea00;
-  color: #000000;
+@layer base {
+  body {
+    @apply bg-[#f4f4f0] text-black font-sans antialiased selection:bg-[#FFEA00] selection:text-black;
+  }
 }
 
 /* Hide scrollbars app-wide while keeping scroll functionality */
@@ -38,84 +22,3 @@ body {
   display: none;
 }
 
-/* Global grayscale remap for existing utility-based styling */
-.bg-white,
-.bg-amber-50\/95,
-.bg-amber-100,
-.bg-emerald-50,
-.bg-emerald-100,
-.bg-rose-100 {
-  background-color: var(--app-surface-1) !important;
-}
-
-.bg-slate-50 {
-  background-color: var(--app-surface-2) !important;
-}
-
-.bg-slate-700,
-.bg-slate-800,
-.bg-slate-900,
-.bg-slate-800\/70,
-.bg-blue-600 {
-  background-color: var(--app-surface-2) !important;
-}
-
-.bg-slate-100 {
-  background-color: var(--app-surface-3) !important;
-}
-
-.bg-slate-200 {
-  background-color: var(--app-surface-4) !important;
-}
-
-.text-slate-900,
-.text-slate-800,
-.text-slate-700,
-.text-slate-600,
-.text-slate-500,
-.text-slate-400,
-.text-amber-700,
-.text-amber-800,
-.text-emerald-700,
-.text-emerald-800,
-.text-rose-700,
-.text-blue-600 {
-  color: var(--app-fg) !important;
-}
-
-.text-slate-500,
-.text-slate-400 {
-  color: var(--app-muted) !important;
-}
-
-.border-slate-100,
-.border-slate-200,
-.border-slate-300,
-.border-slate-400,
-.border-slate-500,
-.border-slate-600,
-.border-slate-700,
-.border-amber-300,
-.border-amber-400,
-.border-emerald-300,
-.border-emerald-400,
-.border-emerald-500,
-.border-rose-300,
-.border-blue-600 {
-  border-color: var(--app-border) !important;
-}
-
-.shadow-sm,
-.shadow,
-.shadow-md,
-.shadow-lg,
-.shadow-xl,
-.shadow-2xl {
-  box-shadow: none !important;
-}
-
-/* Keep tab active blue distinct from global grayscale remaps */
-.tab-active-blue {
-  background-color: #ffea00 !important;
-  color: #000000 !important;
-}

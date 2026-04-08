@@ -44,9 +44,9 @@ export default function MonitoringControls({
   const stopRole = triggerRoles.find((roleLabel) => roleLabel === "Stop") ?? "Stop";
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
-        <div className="flex flex-wrap gap-2">
+    <div className="border-[3px] border-black bg-white p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-4 border-b-[3px] border-black pb-5">
+        <div className="flex flex-wrap gap-3">
           <ActionButton
             label={refreshing ? "Refreshing..." : "Refresh"}
             onClick={fetchState}
@@ -72,7 +72,7 @@ export default function MonitoringControls({
             variant="secondary"
           />
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-3">
           <ActionButton
             label="Save Results JSON"
             onClick={saveResultsJson}
@@ -83,7 +83,7 @@ export default function MonitoringControls({
         </div>
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-4">
         <ActionButton
           label={startRole}
           onClick={() => fireTrigger(startRole)}
@@ -93,20 +93,20 @@ export default function MonitoringControls({
           active={triggerActive(startRole)}
         />
 
-        <div className="inline-flex items-center gap-1 rounded-xl border border-slate-300 bg-slate-100 px-1 py-1">
+        <div className="inline-flex items-center gap-1 border-[3px] border-black bg-gray-100 p-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           {splitRoles.map((roleLabel) => (
             <button
               key={roleLabel}
               type="button"
               onClick={() => fireTrigger(roleLabel)}
               disabled={triggerDisabled(roleLabel) || busyAction === `trigger:${roleLabel}`}
-              className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 ${
+              className={`px-5 py-2 text-sm font-bold uppercase tracking-widest transition-colors disabled:opacity-50 ${
                 triggerActive(roleLabel)
-                  ? "border border-slate-300 bg-white text-slate-800 shadow-sm"
-                  : "border border-transparent bg-transparent text-slate-700 hover:bg-slate-200"
+                  ? "border-[2px] border-black bg-white text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                  : "border-[2px] border-transparent bg-transparent text-gray-600 hover:bg-gray-200"
               }`}
             >
-              {busyAction === `trigger:${roleLabel}` ? "Working..." : roleLabel}
+              {busyAction === `trigger:${roleLabel}` ? "WORKING..." : roleLabel}
             </button>
           ))}
         </div>
@@ -121,16 +121,16 @@ export default function MonitoringControls({
         />
       </div>
 
-      <p className="text-xs text-slate-600">
+      <p className="text-xs font-bold uppercase tracking-wide text-gray-600">
         Monitoring controls switch stage only. Trigger buttons emit Start, progressive Splits, and Stop packets while monitoring is active.
       </p>
       {!monitoringActive && (!hasStartAssignment || !hasStopAssignment) ? (
-        <p className="mt-1 text-xs text-amber-700">
+        <p className="mt-2 text-xs font-bold uppercase tracking-wide text-[#FF1744]">
           Assign one device to Start and one device to Stop before starting monitoring.
         </p>
       ) : null}
       {lastSavedFilePath ? (
-        <p className="mt-2 break-all text-xs text-slate-500">
+        <p className="mt-3 break-all text-xs font-bold uppercase tracking-wide text-gray-500">
           Last saved: {lastSavedFilePath}
           {lastSavedAtIso ? ` (${formatIsoTime(lastSavedAtIso)})` : ""}
         </p>

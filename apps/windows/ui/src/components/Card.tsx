@@ -8,9 +8,13 @@ type CardProps = {
 
 export default function Card({ title, subtitle, children }: CardProps) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">{title}</h2>
-      {subtitle ? <p className="mb-3 text-xs text-slate-500">{subtitle}</p> : null}
+    <section className="border-[3px] border-black bg-white p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+      {(title || subtitle) && (
+        <div className="mb-5 border-b-[3px] border-black pb-3">
+          {title && <h2 className="text-xl font-bold uppercase tracking-tight text-black">{title}</h2>}
+          {subtitle && <p className="mt-1 text-sm font-medium text-gray-700">{subtitle}</p>}
+        </div>
+      )}
       {children}
     </section>
   );

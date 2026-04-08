@@ -1,12 +1,38 @@
-import {
-  computeProgressiveRoleOptions as computeSharedProgressiveRoleOptions,
-  formatDateForResultName,
-  normalizeAthleteNameDraft,
-  ROLE_ORDER,
-  roleOrderIndex,
-} from "../../shared/src/sessionShared.js";
+export const ROLE_ORDER = [
+  "Unassigned",
+  "Start",
+  "Split 1",
+  "Split 2",
+  "Split 3",
+  "Split 4",
+  "Split 5",
+  "Split 6",
+  "Split 7",
+  "Split 8",
+  "Split 9",
+  "Split 10",
+  "Stop"
+];
 
-export { formatDateForResultName, normalizeAthleteNameDraft, ROLE_ORDER, roleOrderIndex };
+export function roleOrderIndex(roleLabel: string): number {
+  const index = ROLE_ORDER.indexOf(roleLabel);
+  return index !== -1 ? index : 999;
+}
+
+export function formatDateForResultName(date: Date): string {
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yyyy = date.getFullYear();
+  return `${dd}_${mm}_${yyyy}`;
+}
+
+export function normalizeAthleteNameDraft(name: string): string {
+  return name.trim().replace(/\s+/g, '_').toLowerCase();
+}
+
+export function computeProgressiveRoleOptions(assignedRoles: string[]): string[] {
+  return ["Unassigned", "Start", "Split 1", "Split 2", "Split 3", "Split 4", "Stop"];
+}
 
 export function formatDurationNanos(nanos: number): string {
   if (!Number.isFinite(nanos) || nanos <= 0) return "-";
@@ -104,8 +130,4 @@ export function normalizeRoleOptions(roleOptions: string[]): string[] {
     return ["Unassigned", "Start", "Split 1", "Stop"];
   }
   return unique.sort((left, right) => roleOrderIndex(left) - roleOrderIndex(right));
-}
-
-export function computeProgressiveRoleOptions(clients: any[]): string[] {
-  return computeSharedProgressiveRoleOptions((clients ?? []).map((client) => client?.assignedRole));
 }

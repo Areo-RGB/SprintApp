@@ -21,47 +21,47 @@ export default function SystemDetails({
   snapshot,
 }: SystemDetailsProps) {
   return (
-    <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <summary className="cursor-pointer text-sm font-semibold uppercase tracking-wide text-slate-700">
+    <details className="border-[3px] border-black bg-white p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+      <summary className="cursor-pointer text-sm font-bold uppercase tracking-widest text-black hover:text-[#FF1744] transition-colors">
         System Details
       </summary>
-      <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
         <Card title="Session Status" subtitle="Current host state">
-          <div className="space-y-1 text-sm">
+          <div className="space-y-2 text-sm font-bold text-black">
             <p>
-              Stage: <span className="font-semibold">{stageLabel(stage)}</span>
+              STAGE: <span className="text-[#FF1744]">{stageLabel(stage)}</span>
             </p>
             <p>
-              Run ID: <span className="font-mono text-xs">{session.runId ?? "-"}</span>
+              RUN ID: <span className="font-mono text-xs bg-gray-200 px-1">{session.runId ?? "-"}</span>
             </p>
             <p>
-              Monitoring Active: <span className="font-semibold">{monitoringActive ? "Yes" : "No"}</span>
+              MONITORING ACTIVE: <span className={monitoringActive ? "text-[#00E676]" : "text-[#FF1744]"}>{monitoringActive ? "YES" : "NO"}</span>
             </p>
-            <p>
-              Timeline: Start {hostStartSensorNanos !== null ? "set" : "pending"} | Splits {hostSplitMarks.length}/4 | Stop{" "}
-              {hostStopSensorNanos !== null ? "set" : "pending"}
+            <p className="text-xs uppercase tracking-wide">
+              Timeline: Start {hostStartSensorNanos !== null ? "SET" : "PENDING"} | Splits {hostSplitMarks.length}/4 | Stop{" "}
+              {hostStopSensorNanos !== null ? "SET" : "PENDING"}
             </p>
           </div>
         </Card>
 
         <Card title="Server Status" subtitle="Runtime and counters">
-          <div className="space-y-1 text-sm">
+          <div className="space-y-2 text-sm font-bold text-black font-mono">
             <p>
               TCP: {snapshot?.server?.tcp?.host ?? "-"}:{snapshot?.server?.tcp?.port ?? "-"}
             </p>
             <p>
               HTTP: {snapshot?.server?.http?.host ?? "-"}:{snapshot?.server?.http?.port ?? "-"}
             </p>
-            <p>Connected Clients: {snapshot?.stats?.connectedClients ?? 0}</p>
-            <p>Total Frames: {snapshot?.stats?.totalFrames ?? 0}</p>
-            <p>Parse Errors: {snapshot?.stats?.parseErrors ?? 0}</p>
+            <p>CLIENTS: {snapshot?.stats?.connectedClients ?? 0}</p>
+            <p>FRAMES: {snapshot?.stats?.totalFrames ?? 0}</p>
+            <p>ERRORS: {snapshot?.stats?.parseErrors ?? 0}</p>
           </div>
         </Card>
 
         <Card title="Clock Domain" subtitle="Host time-domain mapping">
-          <p className="text-sm text-slate-700">{snapshot?.clockDomainMapping?.description ?? "Clock-domain status unavailable."}</p>
-          <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
-            {snapshot?.clockDomainMapping?.implemented ? "Implemented" : "Not Implemented Yet"}
+          <p className="text-sm font-bold text-black">{snapshot?.clockDomainMapping?.description ?? "Clock-domain status unavailable."}</p>
+          <p className={`mt-3 text-xs font-bold uppercase tracking-widest ${snapshot?.clockDomainMapping?.implemented ? "text-[#00E676]" : "text-[#FF1744]"}`}>
+            {snapshot?.clockDomainMapping?.implemented ? "IMPLEMENTED" : "NOT IMPLEMENTED YET"}
           </p>
         </Card>
       </div>

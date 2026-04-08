@@ -18,15 +18,3 @@ View your app in AI Studio: https://ai.studio/apps/49d1e79f-9e5c-489f-88cb-4b40e
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
-
-## Backend Wiring (Local)
-
-This UI is wired to the Windows backend through Vite proxy routes:
-
-- `/api` -> `WINDOWS_UI_BACKEND_URL`
-- `/ws` -> `WINDOWS_UI_BACKEND_URL`
-
-Default backend target is `http://127.0.0.1:8787`.
-Override it in `.env.local` when needed:
-
-`WINDOWS_UI_BACKEND_URL="http://127.0.0.1:8787"`

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { deriveMonitoringElapsedMs } from "./raceClock.js";
 import {
   buildMonitoringPointRows,
@@ -22,94 +22,10 @@ import MonitoringControls from "./components/MonitoringControls";
 import RaceTimerPanel from "./components/RaceTimerPanel";
 import SavedResultsPanel from "./components/SavedResultsPanel";
 import SystemDetails from "./components/SystemDetails";
+import { generateDemoRuns } from "./demoData";
 
 const AUTO_APPLY_DELAY_MS = 350;
-const DEV_UI_MOCK_MODE = import.meta.env.DEV;
-const FRONTEND_SAVED_RESULTS_URL = "/saved-results.json";
-const FRONTEND_SAVED_RESULTS_LOCAL_KEY = "sprintsync.savedResults.v1";
-const FRONTEND_SAVED_RESULTS_DELETED_KEY = "sprintsync.savedResults.deleted.v1";
-
-function summarizeFrontendSavedResult(fileName: string, payload: any) {
-  const latestLapResults = Array.isArray(payload?.latestLapResults) ? payload.latestLapResults : [];
-  const bestLap = latestLapResults.find((lap: any) => Number.isFinite(Number(lap?.elapsedNanos)));
-  return {
-    fileName,
-    filePath: fileName,
-    resultName: String(payload?.resultName ?? fileName.replace(/\.json$/iu, "")),
-    athleteName: typeof payload?.athleteName === "string" ? payload.athleteName : null,
-    notes: typeof payload?.notes === "string" ? payload.notes : null,
-    runId: typeof payload?.runId === "string" ? payload.runId : null,
-    savedAtIso:
-      typeof payload?.exportedAtIso === "string" && payload.exportedAtIso.length > 0
-        ? payload.exportedAtIso
-        : new Date().toISOString(),
-    resultCount: latestLapResults.length,
-    bestElapsedNanos: bestLap ? Number(bestLap.elapsedNanos) : null,
-  };
-}
-
-async function loadFrontendSavedResultsPayload() {
-  const response = await fetch(FRONTEND_SAVED_RESULTS_URL);
-  if (!response.ok) {
-    throw new Error(`Frontend saved results request failed (${response.status})`);
-  }
-  const payload = await response.json();
-  return Array.isArray(payload) ? payload : [];
-}
-
-function readLocalSavedResultsPayload() {
-  try {
-    const raw = window.localStorage.getItem(FRONTEND_SAVED_RESULTS_LOCAL_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeLocalSavedResultsPayload(entries: any[]) {
-  window.localStorage.setItem(FRONTEND_SAVED_RESULTS_LOCAL_KEY, JSON.stringify(entries));
-}
-
-function readDeletedSavedResultFileNames() {
-  try {
-    const raw = window.localStorage.getItem(FRONTEND_SAVED_RESULTS_DELETED_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeDeletedSavedResultFileNames(fileNames: string[]) {
-  window.localStorage.setItem(FRONTEND_SAVED_RESULTS_DELETED_KEY, JSON.stringify(fileNames));
-}
-
-function formatAppVersionLabel(rawVersion: string) {
-  const normalized = String(rawVersion ?? "").trim();
-  if (!normalized) {
-    return "v--";
-  }
-  if (normalized.toLowerCase().startsWith("v")) {
-    return normalized;
-  }
-  return `v${normalized}`;
-}
-
-function readAppVersionFromLocation() {
-  try {
-    const params = new URL(window.location.href).searchParams;
-    const appVersion = params.get("appVersion");
-    if (!appVersion) {
-      return null;
-    }
-    return formatAppVersionLabel(appVersion);
-  } catch {
-    return null;
-  }
-}
+const DEV_UI_MOCK_MODE = import.meta.env.VITE_USE_DEV_MOCK === "true";
 
 function createDevMockSnapshot() {
   const now = Date.now();
@@ -274,25 +190,23 @@ function applyDevMockControl(currentSnapshot: any, path: string, body: any) {
 
 export default function App() {
   const [snapshot, setSnapshot] = useState<any>(() => (DEV_UI_MOCK_MODE ? createDevMockSnapshot() : null));
-  const [appVersion, setAppVersion] = useState("v--");
   const [wsConnected, setWsConnected] = useState(() => DEV_UI_MOCK_MODE);
   const [busyAction, setBusyAction] = useState("");
   const [lastError, setLastError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  const [sensitivityDraftByTarget, setSensitivityDraftByTarget] = useState({});
-  const [distanceDraftByTarget, setDistanceDraftByTarget] = useState({});
+  const [sensitivityDraftByTarget, setSensitivityDraftByTarget] = useState<Record<string, string>>({});
+  const [distanceDraftByTarget, setDistanceDraftByTarget] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState("live");
   const [speedUnit, setSpeedUnit] = useState("kmh");
-  const [savedResults, setSavedResults] = useState([]);
+  const [savedResults, setSavedResults] = useState<any[]>([]);
   const [savedResultsLoading, setSavedResultsLoading] = useState(false);
   const [savedResultLoading, setSavedResultLoading] = useState(false);
   const [selectedSavedFileName, setSelectedSavedFileName] = useState("");
-  const [selectedSavedMeta, setSelectedSavedMeta] = useState(null);
-  const [selectedSavedPayload, setSelectedSavedPayload] = useState(null);
-  const [savedResultsByFileName, setSavedResultsByFileName] = useState<Record<string, any>>({});
+  const [selectedSavedMeta, setSelectedSavedMeta] = useState<any>(null);
+  const [selectedSavedPayload, setSelectedSavedPayload] = useState<any>(null);
   const [runHistory, setRunHistory] = useState<Array<{ key: string; rows: any[] }>>([]);
   const [raceClockTickMs, setRaceClockTickMs] = useState(() => Date.now());
-  const raceClockBaseMsRef = useRef(null);
+  const raceClockBaseMsRef = useRef<number | null>(null);
   const raceClockAnchorRef = useRef({
     elapsedMs: 0,
     capturedAtMs: Date.now(),
@@ -322,6 +236,25 @@ export default function App() {
     setBusyAction(actionKey);
     try {
       if (DEV_UI_MOCK_MODE) {
+        if (path === "/api/control/save-results") {
+          const stored = localStorage.getItem('sprint_sync_results');
+          const items = stored ? JSON.parse(stored) : [];
+          const fileName = `result_${Date.now()}.json`;
+          const newResult = {
+            fileName,
+            resultName: (body as any).name,
+            athleteName: (body as any).athleteName,
+            notes: (body as any).notes,
+            exportedAtIso: new Date().toISOString(),
+            runId: snapshot?.session?.runId || `run-${Date.now()}`,
+            latestLapResults: snapshot?.latestLapResults || []
+          };
+          items.unshift(newResult);
+          localStorage.setItem('sprint_sync_results', JSON.stringify(items));
+          setLastError("");
+          return { ok: true, mock: true, fileName };
+        }
+
         setSnapshot((previous: any) => applyDevMockControl(previous, path, body));
         setLastError("");
         return { ok: true, mock: true };
@@ -356,32 +289,47 @@ export default function App() {
     }
   }
 
-  async function fetchSavedResultsList(preferredFileName = null) {
+  async function fetchSavedResultsList(preferredFileName: string | null = null) {
     setSavedResultsLoading(true);
     try {
-      const [staticFrontendItems, localItems] = await Promise.all([
-        loadFrontendSavedResultsPayload().catch(() => []),
-        Promise.resolve(readLocalSavedResultsPayload()),
-      ]);
-      const deletedFileNames = new Set(readDeletedSavedResultFileNames());
-      const frontendItems = [...localItems, ...staticFrontendItems].filter((entry: any, index: number) => {
-        const fileName =
-          typeof entry?.fileName === "string" && entry.fileName.length > 0
-            ? entry.fileName
-            : `saved-result-${index + 1}.json`;
-        return !deletedFileNames.has(fileName);
-      });
-      const byFileName: Record<string, any> = {};
-      const items = frontendItems.map((entry: any, index: number) => {
-        const fileName =
-          typeof entry?.fileName === "string" && entry.fileName.length > 0
-            ? entry.fileName
-            : `saved-result-${index + 1}.json`;
-        const resultPayload = entry?.payload ?? entry;
-        byFileName[fileName] = resultPayload;
-        return summarizeFrontendSavedResult(fileName, resultPayload);
-      });
-      setSavedResultsByFileName(byFileName);
+      if (DEV_UI_MOCK_MODE) {
+        const stored = localStorage.getItem('sprint_sync_results');
+        let items = [];
+        if (!stored) {
+          items = generateDemoRuns();
+          localStorage.setItem('sprint_sync_results', JSON.stringify(items));
+        } else {
+          items = JSON.parse(stored);
+        }
+        const metaItems = items.map((item: any) => ({
+          fileName: item.fileName,
+          resultName: item.resultName,
+          athleteName: item.athleteName,
+          savedAtIso: item.exportedAtIso,
+          resultCount: item.latestLapResults?.length ?? 0,
+          bestElapsedNanos: item.latestLapResults?.[item.latestLapResults.length - 1]?.elapsedNanos ?? 0
+        }));
+        setSavedResults(metaItems);
+
+        if (metaItems.length === 0) {
+          setSelectedSavedFileName("");
+          setSelectedSavedMeta(null);
+          setSelectedSavedPayload(null);
+          return;
+        }
+
+        const desired = preferredFileName || selectedSavedFileName;
+        const selected = metaItems.find((item: any) => item.fileName === desired) ?? metaItems[0];
+        setSelectedSavedFileName(selected.fileName);
+        setSelectedSavedMeta(selected);
+        setLastError("");
+        return;
+      }
+
+      const response = await fetch("/api/results");
+      if (!response.ok) throw new Error(`Saved results request failed (${response.status})`);
+      const payload = await response.json();
+      const items = Array.isArray(payload?.items) ? payload.items : [];
       setSavedResults(items);
 
       if (items.length === 0) {
@@ -402,7 +350,7 @@ export default function App() {
     }
   }
 
-  async function loadSavedResult(fileName) {
+  async function loadSavedResult(fileName: string) {
     if (!fileName) {
       setSelectedSavedPayload(null);
       return;
@@ -410,25 +358,19 @@ export default function App() {
 
     setSavedResultLoading(true);
     try {
-      if (savedResultsByFileName[fileName]) {
-        setSelectedSavedPayload(savedResultsByFileName[fileName]);
+      if (DEV_UI_MOCK_MODE) {
+        const stored = localStorage.getItem('sprint_sync_results');
+        const items = stored ? JSON.parse(stored) : [];
+        const payload = items.find((i: any) => i.fileName === fileName) || null;
+        setSelectedSavedPayload(payload);
         setLastError("");
         return;
       }
 
-      const [staticFrontendItems, localItems] = await Promise.all([
-        loadFrontendSavedResultsPayload().catch(() => []),
-        Promise.resolve(readLocalSavedResultsPayload()),
-      ]);
-      const frontendItems = [...localItems, ...staticFrontendItems];
-      const matched = frontendItems.find((entry: any, index: number) => {
-        const entryFileName =
-          typeof entry?.fileName === "string" && entry.fileName.length > 0
-            ? entry.fileName
-            : `saved-result-${index + 1}.json`;
-        return entryFileName === fileName;
-      });
-      setSelectedSavedPayload(matched ? matched?.payload ?? matched : null);
+      const response = await fetch(`/api/results/${encodeURIComponent(fileName)}`);
+      if (!response.ok) throw new Error(`Saved result load failed (${response.status})`);
+      const payload = await response.json();
+      setSelectedSavedPayload(payload?.payload ?? null);
       setLastError("");
     } catch (error) {
       setSelectedSavedPayload(null);
@@ -438,19 +380,19 @@ export default function App() {
     }
   }
 
-  function assignRole(targetId, role) {
+  function assignRole(targetId: string, role: string) {
     postControl("/api/control/assign-role", { targetId, role }, `assign-role:${targetId}`);
   }
 
-  function fireTrigger(role) {
+  function fireTrigger(role: string) {
     postControl("/api/control/trigger", { role }, `trigger:${role}`);
   }
 
-  function updateDeviceConfig(targetId, patch, actionKey) {
+  function updateDeviceConfig(targetId: string, patch: any, actionKey: string) {
     postControl("/api/control/device-config", { targetId, ...patch }, actionKey);
   }
 
-  function clearScheduledApply(timeoutsRef, targetId) {
+  function clearScheduledApply(timeoutsRef: React.MutableRefObject<Map<string, number>>, targetId: string) {
     const timeoutId = timeoutsRef.current.get(targetId);
     if (timeoutId) {
       window.clearTimeout(timeoutId);
@@ -458,20 +400,20 @@ export default function App() {
     }
   }
 
-  function setCameraFacing(targetId, cameraFacing) {
+  function setCameraFacing(targetId: string, cameraFacing: string) {
     updateDeviceConfig(targetId, { cameraFacing }, `device-config-camera:${targetId}`);
   }
 
-  function toggleCameraFacing(targetId, currentCameraFacing) {
+  function toggleCameraFacing(targetId: string, currentCameraFacing: string) {
     const nextCameraFacing = currentCameraFacing === "front" ? "rear" : "front";
     setCameraFacing(targetId, nextCameraFacing);
   }
 
-  function requestDeviceClockResync(targetId) {
+  function requestDeviceClockResync(targetId: string) {
     postControl("/api/control/resync-device", { targetId }, `device-resync:${targetId}`);
   }
 
-  function updateSensitivityDraft(targetId, rawValue, fallbackSensitivity) {
+  function updateSensitivityDraft(targetId: string, rawValue: string, fallbackSensitivity: number) {
     setSensitivityDraftByTarget((previous) => ({
       ...previous,
       [targetId]: rawValue,
@@ -507,7 +449,7 @@ export default function App() {
     sensitivityApplyTimeoutsRef.current.set(targetId, timeoutId);
   }
 
-  function updateDistanceDraft(targetId, rawValue, fallbackDistanceMeters) {
+  function updateDistanceDraft(targetId: string, rawValue: string, fallbackDistanceMeters: number) {
     setDistanceDraftByTarget((previous) => ({
       ...previous,
       [targetId]: rawValue,
@@ -561,65 +503,20 @@ export default function App() {
     const notesPrompt = window.prompt("Notes (optional)", "");
     if (notesPrompt === null) return;
 
-    const now = new Date();
-    const exportedAtIso = now.toISOString();
-    const runId =
-      typeof snapshot?.session?.runId === "string" && snapshot.session.runId.length > 0
-        ? snapshot.session.runId
-        : `run-${Date.now()}`;
-    const fileName = `${String(namePrompt || runId).replace(/[^a-zA-Z0-9._-]+/g, "_")}.json`;
-    const payload = {
-      type: "sprintsync-results",
-      exportedAtIso,
-      exportedAtMs: now.getTime(),
-      runId,
-      resultName: namePrompt,
-      athleteName: athletePrompt,
-      notes: notesPrompt,
-      session: snapshot?.session ?? {},
-      clients: Array.isArray(snapshot?.clients) ? snapshot.clients : [],
-      latestLapResults: Array.isArray(latestLapResults) ? latestLapResults : [],
-      lapHistory: Array.isArray(snapshot?.lapHistory) ? snapshot.lapHistory : [],
-      recentEvents: Array.isArray(snapshot?.recentEvents) ? snapshot.recentEvents : [],
-    };
+    const response = await postControl(
+      "/api/control/save-results",
+      {
+        name: namePrompt,
+        athleteName: athletePrompt,
+        notes: notesPrompt,
+      },
+      "/api/control/save-results",
+    );
 
-    if (!Array.isArray(payload.latestLapResults) || payload.latestLapResults.length === 0) {
-      setLastError("No lap results available to save.");
-      return;
+    if (response?.fileName) {
+      await fetchSavedResultsList(response.fileName);
+      setActiveTab("saved");
     }
-
-    const previousLocalItems = readLocalSavedResultsPayload();
-    const nextLocalItems = [
-      { fileName, payload },
-      ...previousLocalItems.filter((entry: any) => entry?.fileName !== fileName),
-    ];
-    writeLocalSavedResultsPayload(nextLocalItems);
-    const deleted = readDeletedSavedResultFileNames();
-    if (deleted.includes(fileName)) {
-      writeDeletedSavedResultFileNames(deleted.filter((name) => name !== fileName));
-    }
-    await fetchSavedResultsList(fileName);
-    setActiveTab("saved");
-    setLastError("");
-  }
-
-  function deleteSavedResult(fileName: string) {
-    if (typeof fileName !== "string" || fileName.length === 0) return;
-    const localItems = readLocalSavedResultsPayload().filter((entry: any) => entry?.fileName !== fileName);
-    writeLocalSavedResultsPayload(localItems);
-
-    const deleted = readDeletedSavedResultFileNames();
-    if (!deleted.includes(fileName)) {
-      writeDeletedSavedResultFileNames([...deleted, fileName]);
-    }
-
-    const fallbackFileName = savedResults.find((item) => item?.fileName !== fileName)?.fileName ?? "";
-    setSelectedSavedFileName((current) => (current === fileName ? fallbackFileName : current));
-    setSelectedSavedMeta((current) => (current?.fileName === fileName ? null : current));
-    if (selectedSavedFileName === fileName) {
-      setSelectedSavedPayload(null);
-    }
-    fetchSavedResultsList(fallbackFileName || null);
   }
 
   useEffect(() => {
@@ -627,9 +524,9 @@ export default function App() {
       return;
     }
 
-    let socket;
+    let socket: WebSocket;
     let disposed = false;
-    let reconnectHandle;
+    let reconnectHandle: number;
 
     function connect() {
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";
@@ -747,8 +644,8 @@ export default function App() {
   const serverRoleOptions = useMemo(() => normalizeRoleOptions(session.roleOptions), [session.roleOptions]);
   const roleOptions = serverRoleOptions.length > 0 ? serverRoleOptions : fallbackRoleOptions;
   const triggerRoles = ["Start", "Split 1", "Split 2", "Split 3", "Split 4", "Stop"];
-  const hasStartAssignment = clients.some((client) => client.assignedRole === "Start");
-  const hasStopAssignment = clients.some((client) => client.assignedRole === "Stop");
+  const hasStartAssignment = clients.some((client: any) => client.assignedRole === "Start");
+  const hasStopAssignment = clients.some((client: any) => client.assignedRole === "Stop");
   const canStartMonitoring = clients.length > 0 && hasStartAssignment && hasStopAssignment && !monitoringActive;
 
   const savedLatestLapResults = Array.isArray(selectedSavedPayload?.latestLapResults)
@@ -873,7 +770,7 @@ export default function App() {
       return "00.00s";
     }
 
-    const baseMs = Number.isFinite(raceClockBaseMsRef.current) ? raceClockBaseMsRef.current : monitoringElapsedMs;
+    const baseMs = Number.isFinite(raceClockBaseMsRef.current) ? raceClockBaseMsRef.current! : monitoringElapsedMs;
     const anchorElapsedMs = Number.isFinite(raceClockAnchorRef.current.elapsedMs) ? raceClockAnchorRef.current.elapsedMs : monitoringElapsedMs;
     const anchorCapturedAtMs = Number.isFinite(raceClockAnchorRef.current.capturedAtMs)
       ? raceClockAnchorRef.current.capturedAtMs
@@ -884,7 +781,7 @@ export default function App() {
     return formatRaceClockMs(Math.max(0, effectiveElapsedMs - baseMs));
   }, [hostStartSensorNanos, hostStopSensorNanos, monitoringActive, raceClockTickMs, monitoringElapsedMs]);
 
-  function triggerDisabled(roleLabel) {
+  function triggerDisabled(roleLabel: string) {
     if (!monitoringActive) {
       return true;
     }
@@ -915,7 +812,7 @@ export default function App() {
     return false;
   }
 
-  function triggerActive(roleLabel) {
+  function triggerActive(roleLabel: string) {
     if (roleLabel === "Start") {
       return hostStartSensorNanos !== null && hostStopSensorNanos === null;
     }
@@ -929,129 +826,25 @@ export default function App() {
     setSpeedUnit((previous) => (previous === "kmh" ? "mps" : "kmh"));
   }
 
-  async function loadAppVersion() {
-    const locationVersion = readAppVersionFromLocation();
-    if (locationVersion) {
-      setAppVersion(locationVersion);
-      return true;
-    }
-
-    try {
-      const tauriVersion = await (window as any).__TAURI_INTERNALS__?.invoke?.("plugin:app|version");
-      if (typeof tauriVersion === "string" && tauriVersion.trim().length > 0) {
-        setAppVersion(formatAppVersionLabel(tauriVersion));
-        return true;
-      }
-    } catch {
-      // Continue to additional fallbacks below.
-    }
-
-    try {
-      const tauriVersion = await (window as any).__TAURI_INTERNALS__?.invoke?.("get_app_version");
-      if (typeof tauriVersion === "string" && tauriVersion.trim().length > 0) {
-        setAppVersion(formatAppVersionLabel(tauriVersion));
-        return true;
-      }
-    } catch {
-      // Keep fallback value for non-Tauri browser contexts.
-    }
-
-    return false;
-  }
-
-  async function minimizeWindow() {
-    try {
-      const tauriWindowApi = (window as any).__TAURI__?.window;
-      const currentWindow =
-        tauriWindowApi?.getCurrentWindow?.() ??
-        tauriWindowApi?.getCurrent?.();
-      if (currentWindow && typeof currentWindow.minimize === "function") {
-        await currentWindow.minimize();
-        return;
-      }
-    } catch {
-      // noop: fallback path below
-    }
-
-    try {
-      const invoke = (window as any).__TAURI_INTERNALS__?.invoke;
-      if (typeof invoke === "function") {
-        await invoke("plugin:window|minimize", { label: "main" });
-        return;
-      }
-    } catch {
-      // Continue to command fallback below.
-    }
-
-    try {
-      const invoke = (window as any).__TAURI_INTERNALS__?.invoke;
-      if (typeof invoke === "function") {
-        await invoke("minimize_main_window");
-      }
-    } catch {
-      // noop in non-Tauri browser contexts
-    }
-  }
-
-  useEffect(() => {
-    let disposed = false;
-    let retryHandle: number | undefined;
-    let attempts = 0;
-    const maxAttempts = 20;
-
-    const tryLoadVersion = async () => {
-      if (disposed) return;
-      attempts += 1;
-      const loaded = await loadAppVersion();
-      if (!loaded && attempts < maxAttempts && !disposed) {
-        retryHandle = window.setTimeout(() => {
-          void tryLoadVersion();
-        }, 250);
-      }
-    };
-
-    void tryLoadVersion();
-
-    return () => {
-      disposed = true;
-      if (retryHandle) {
-        window.clearTimeout(retryHandle);
-      }
-    };
-  }, []);
-
   return (
-    <div className="min-h-screen bg-black text-slate-900">
-      <div className="fixed right-4 top-4 z-40 flex items-center gap-1.5 rounded-lg border border-slate-700/55 bg-slate-900/40 px-1.5 py-1 shadow-sm backdrop-blur-sm">
-        <span className="rounded px-2 py-1 text-[10px] font-medium tracking-wide text-slate-400/90">
-          {appVersion}
-        </span>
-        <button
-          type="button"
-          onClick={() => {
-            void minimizeWindow();
-          }}
-          title="Minimize window"
-          aria-label="Minimize window"
-          className="h-7 w-7 rounded-md border border-slate-600/50 bg-slate-900/30 text-base leading-none text-slate-400 transition-colors hover:border-slate-400/70 hover:text-slate-200"
-        >
-          −
-        </button>
-      </div>
+    <div className="min-h-screen bg-[#f4f4f0] text-black font-sans">
       <main className="flex w-full flex-col gap-4 px-2 pb-2 pt-0 md:px-3 md:pb-3 md:pt-0">
         <section className="space-y-4">
           {lastError ? (
-            <p className="rounded-md bg-rose-100 px-3 py-2 text-sm text-rose-700">{lastError}</p>
+            <div className="border-[3px] border-black bg-[#FF1744] p-4 text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <p className="font-bold uppercase tracking-wide">Error</p>
+              <p className="font-mono text-sm">{lastError}</p>
+            </div>
           ) : null}
 
         {activeTab === "saved" ? (
           <>
-            <div className="flex justify-center">
-              <nav className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 p-1">
+            <div className="flex justify-center mt-4">
+              <nav className="inline-flex items-center gap-2 border-[3px] border-black bg-white p-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                 <button
                   type="button"
                   onClick={() => setActiveTab("live")}
-                  className="rounded-lg px-4 py-2 text-sm font-semibold text-blue-100 transition-colors hover:bg-blue-700/40 hover:text-white"
+                  className="px-6 py-2 text-sm font-bold uppercase tracking-widest text-black transition-colors hover:bg-gray-100"
                 >
                   Live Monitor
                 </button>
@@ -1061,10 +854,10 @@ export default function App() {
                     setActiveTab("saved");
                     fetchSavedResultsList();
                   }}
-                  className="tab-active-blue rounded-lg px-4 py-2 text-sm font-semibold transition-colors"
+                  className="bg-black px-6 py-2 text-sm font-bold uppercase tracking-widest text-[#FFEA00] transition-colors"
                 >
                   <span>Saved Results</span>
-                  <span className="ml-2 inline-flex min-w-6 items-center justify-center rounded-full bg-slate-100 px-1.5 py-0.5 text-xs text-slate-900">
+                  <span className="ml-2 inline-flex min-w-6 items-center justify-center bg-[#FFEA00] px-1.5 py-0.5 text-xs text-black">
                     {savedResults.length}
                   </span>
                 </button>
@@ -1074,7 +867,6 @@ export default function App() {
               savedResultsLoading={savedResultsLoading}
               fetchSavedResultsList={fetchSavedResultsList}
               savedResults={savedResults}
-              deleteSavedResult={deleteSavedResult}
               selectedSavedFileName={selectedSavedFileName}
               setSelectedSavedFileName={setSelectedSavedFileName}
               setSelectedSavedMeta={setSelectedSavedMeta}
@@ -1089,14 +881,14 @@ export default function App() {
           <>
             <div className="relative pt-3">
               <div className="absolute left-1/2 top-6 z-20 -translate-x-1/2">
-                <nav className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 p-1">
+                <nav className="inline-flex items-center gap-2 border-[3px] border-black bg-white p-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                   <button
                     type="button"
                     onClick={() => setActiveTab("live")}
-                    className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                    className={`px-6 py-2 text-sm font-bold uppercase tracking-widest transition-colors ${
                       activeTab === "live"
-                        ? "tab-active-blue"
-                        : "text-blue-100 hover:bg-blue-700/40 hover:text-white"
+                        ? "bg-black text-[#FFEA00]"
+                        : "text-black hover:bg-gray-100"
                     }`}
                   >
                     Live Monitor
@@ -1107,17 +899,17 @@ export default function App() {
                       setActiveTab("saved");
                       fetchSavedResultsList();
                     }}
-                    className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                    className={`px-6 py-2 text-sm font-bold uppercase tracking-widest transition-colors ${
                       activeTab === "saved"
-                        ? "tab-active-blue"
-                        : "text-blue-100 hover:bg-blue-700/40 hover:text-white"
+                        ? "bg-black text-[#FFEA00]"
+                        : "text-black hover:bg-gray-100"
                     }`}
                   >
                     <span>Saved Results</span>
                     {activeTab === "saved" ? (
                       <span
-                        className={`ml-2 inline-flex min-w-6 items-center justify-center rounded-full px-1.5 py-0.5 text-xs ${
-                          activeTab === "saved" ? "bg-slate-100 text-slate-900" : "bg-slate-100 text-slate-600"
+                        className={`ml-2 inline-flex min-w-6 items-center justify-center px-1.5 py-0.5 text-xs ${
+                          activeTab === "saved" ? "bg-[#FFEA00] text-black" : "bg-gray-200 text-black"
                         }`}
                       >
                         {savedResults.length}
@@ -1159,21 +951,62 @@ export default function App() {
               formatIsoTime={formatIsoTime}
             />
 
-            <div className="space-y-4">
-              <details open className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <summary className="cursor-pointer text-sm font-semibold uppercase tracking-wide text-slate-700">
+            <div className="space-y-6">
+              <details open className="border-[3px] border-black bg-white p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                <summary className="cursor-pointer text-sm font-bold uppercase tracking-widest text-black hover:text-[#FF1744] transition-colors">
+                  {monitoringActive ? "Monitoring Results" : "Latest Lap Results"}
+                </summary>
+                <p className="mt-3 mb-5 text-xs font-bold uppercase tracking-wide text-gray-600">Distance checkpoints with time, speed at point, and acceleration</p>
+                {latestLapResults.length === 0 ? (
+                  <p className="text-sm font-bold uppercase text-gray-500">
+                    No monitoring results recorded yet. Fire Start and Stop triggers (with splits if needed) to generate results.
+                  </p>
+                ) : (
+                  <div className="overflow-auto border-[2px] border-black">
+                    <table className="min-w-full text-left text-sm">
+                      <thead className="bg-[#FFEA00] text-xs font-bold uppercase tracking-widest text-black border-b-[2px] border-black">
+                        <tr>
+                          <th className="p-3 border-r-[2px] border-black">Distance</th>
+                          <th className="p-3 border-r-[2px] border-black">Time</th>
+                          <th className="p-3 border-r-[2px] border-black">Speed</th>
+                          <th className="p-3">Acceleration (m/s^2)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y-[2px] divide-black bg-white">
+                        {monitoringPointRows.map(({ lap, pointSpeedMps, accelerationMps2 }) => {
+                          return (
+                            <tr key={lap.id}>
+                              <td className="p-3 border-r-[2px] border-black font-bold uppercase text-black">{formatMeters(lap.distanceMeters)}</td>
+                              <td className="p-3 border-r-[2px] border-black font-mono font-bold text-black">{formatDurationNanos(lap.elapsedNanos)}</td>
+                              <td className="p-3 border-r-[2px] border-black font-bold text-black">
+                                <button type="button" onClick={toggleSpeedUnit} className="font-mono hover:text-[#FF1744] transition-colors">
+                                  {formatSpeedWithUnit(pointSpeedMps ?? 0, speedUnit)}
+                                </button>
+                              </td>
+                              <td className="p-3 font-bold text-black">{formatAcceleration(accelerationMps2 ?? 0)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </details>
+
+              <details open className="border-[3px] border-black bg-white p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                <summary className="cursor-pointer text-sm font-bold uppercase tracking-widest text-black hover:text-[#FF1744] transition-colors">
                   {monitoringActive ? "Monitoring Devices" : "Connected Devices"}
                 </summary>
-                <p className="mt-2 mb-3 text-xs text-slate-500">
+                <p className="mt-3 mb-5 text-xs font-bold uppercase tracking-wide text-gray-600">
                   {monitoringActive
                     ? "Roles are locked while monitoring. Camera, sensitivity, and distance settings remain editable."
                     : "Assign roles and configure camera, sensitivity, and physical distance per device."}
                 </p>
                 {clients.length === 0 ? (
-                  <p className="text-sm text-slate-500">No peers connected yet.</p>
+                  <p className="text-sm font-bold uppercase text-gray-500">No peers connected yet.</p>
                 ) : (
-                  <div className="flex gap-3 overflow-x-auto pb-1">
-                    {clients.map((client) => {
+                  <div className="flex gap-4 overflow-x-auto pb-2">
+                    {clients.map((client: any) => {
                       const targetId = client.roleTarget;
                       const actionKey = `assign-role:${targetId}`;
                       const cameraActionKey = `device-config-camera:${targetId}`;
@@ -1203,6 +1036,7 @@ export default function App() {
 
                       return (
                         <DeviceCard
+                          key={client.endpointId || targetId}
                           client={client}
                           targetId={targetId}
                           assignedRole={assignedRole}
@@ -1244,23 +1078,23 @@ export default function App() {
               snapshot={snapshot}
             />
 
-            <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <summary className="cursor-pointer text-sm font-semibold uppercase tracking-wide text-slate-700">
+            <details className="border-[3px] border-black bg-white p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+              <summary className="cursor-pointer text-sm font-bold uppercase tracking-widest text-black hover:text-[#FF1744] transition-colors">
                 Traffic and Events
               </summary>
-              <div className="mt-3 grid grid-cols-1 gap-4 xl:grid-cols-2">
+              <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
                 <Card title="Protocol Message Types" subtitle="Observed input traffic">
                   {knownTypes.length === 0 ? (
-                    <p className="text-sm text-slate-500">No message types observed yet.</p>
+                    <p className="text-sm font-bold uppercase text-gray-500">No message types observed yet.</p>
                   ) : (
-                    <ul className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
+                    <ul className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
                       {knownTypes.map(([name, count]) => (
                         <li
                           key={name}
-                          className="flex items-center justify-between rounded border border-slate-200 bg-slate-50 px-2 py-1"
+                          className="flex items-center justify-between border-[2px] border-black bg-gray-100 px-3 py-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                         >
-                          <span className="font-mono text-xs">{name}</span>
-                          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold">{count}</span>
+                          <span className="font-mono text-xs font-bold text-black">{name}</span>
+                          <span className="bg-black px-2 py-0.5 text-xs font-bold text-white">{count}</span>
                         </li>
                       ))}
                     </ul>
@@ -1269,16 +1103,16 @@ export default function App() {
 
                 <Card title="Recent Events" subtitle="Newest first">
                   {recentEvents.length === 0 ? (
-                    <p className="text-sm text-slate-500">No events logged yet.</p>
+                    <p className="text-sm font-bold uppercase text-gray-500">No events logged yet.</p>
                   ) : (
-                    <ul className="max-h-80 space-y-2 overflow-auto text-sm">
-                      {recentEvents.map((event) => (
-                        <li key={event.id} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-semibold text-slate-800">{event.message}</span>
-                            <span className="text-xs uppercase tracking-wide text-slate-500">{event.level}</span>
+                    <ul className="max-h-80 space-y-3 overflow-auto text-sm pr-2">
+                      {recentEvents.map((event: any) => (
+                        <li key={event.id} className="border-[2px] border-black bg-gray-100 px-4 py-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="font-bold text-black">{event.message}</span>
+                            <span className={`text-xs font-bold uppercase tracking-widest px-2 py-1 border-[2px] border-black ${event.level === 'error' ? 'bg-[#FF1744] text-white' : 'bg-white text-black'}`}>{event.level}</span>
                           </div>
-                          <div className="mt-1 text-xs text-slate-500">{event.timestampIso}</div>
+                          <div className="mt-2 text-xs font-bold text-gray-500 font-mono">{event.timestampIso}</div>
                         </li>
                       ))}
                     </ul>
