@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 const APP_TITLE: &str = "Sprint Sync Windows";
@@ -115,6 +115,7 @@ struct GithubRelease {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![get_app_version, minimize_main_window])
         .manage(BackendProcessState::default())
         .setup(|app| {
             if let Err(error) = launch_application(app.handle()) {
@@ -135,6 +136,16 @@ pub fn run() {
                 stop_backend_process(app);
             }
         });
+}
+
+#[tauri::command]
+fn get_app_version(app: AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
+#[tauri::command]
+fn minimize_main_window(window: WebviewWindow) -> Result<(), String> {
+    window.minimize().map_err(|err| err.to_string())
 }
 
 fn launch_application(app: &AppHandle) -> Result<(), StartupError> {
@@ -333,7 +344,7 @@ fn create_main_window(app: &AppHandle, backend_url: &str) -> Result<(), StartupE
 
     WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
         .title(APP_TITLE)
-        .fullscreen(true)
+        .maximized(true)
         .decorations(false)
         .build()
         .map_err(|err| StartupError::WindowCreateFailed(err.to_string()))?;

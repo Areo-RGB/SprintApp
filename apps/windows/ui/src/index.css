@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --app-bg: #000000;
-  --app-fg: #f5f5f5;
-  --app-surface-1: #121212;
-  --app-surface-2: #1b1b1b;
-  --app-surface-3: #262626;
-  --app-surface-4: #303030;
-  --app-border: #303030;
-  --app-muted: #a3a3a3;
+  --app-bg: #f4f4f0;
+  --app-fg: #000000;
+  --app-surface-1: #ffffff;
+  --app-surface-2: #ecece6;
+  --app-surface-3: #e2e2db;
+  --app-surface-4: #d6d6ce;
+  --app-border: #c9c9bf;
+  --app-muted: #4b5563;
 }
 
 html,
@@ -21,6 +21,11 @@ body {
   margin: 0;
   background: var(--app-bg);
   color: var(--app-fg);
+}
+
+::selection {
+  background: #ffea00;
+  color: #000000;
 }
 
 /* Hide scrollbars app-wide while keeping scroll functionality */
@@ -111,6 +116,6 @@ body {
 
 /* Keep tab active blue distinct from global grayscale remaps */
 .tab-active-blue {
-  background-color: #2563eb !important;
-  color: #ffffff !important;
+  background-color: #ffea00 !important;
+  color: #000000 !important;
 }

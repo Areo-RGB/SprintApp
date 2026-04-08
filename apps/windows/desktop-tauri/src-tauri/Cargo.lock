@@ -3355,7 +3355,7 @@ dependencies = [
 
 [[package]]
 name = "sprint-sync-windows-desktop-tauri"
-version = "0.1.4"
+version = "0.1.7"
 dependencies = [
  "dirs",
  "include_dir",
