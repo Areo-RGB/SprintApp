@@ -16,16 +16,9 @@
     "intellij-index": {
       "url": "http://127.0.0.1:29170/index-mcp/streamable-http"
     },
-    "idea":{
-      "url":"http://127.0.0.1:64342/sse",
+    "idea": {
+      "url": "http://127.0.0.1:64342/sse",
       "headers": {}
-    },
-    "CodeGraphContext": {
-      "command": "C:\\Users\\paul\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\cgc.EXE",
-      "args": [
-        "mcp",
-        "start"
-      ]
     }
   }
 }

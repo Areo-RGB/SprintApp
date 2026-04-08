@@ -126,7 +126,7 @@ export default function SavedResultsPanel({
         color: "#ffffff",
         font: {
           size: 18,
-          weight: "700" as const,
+          weight: 700,
         },
         padding: {
           top: 8,
@@ -141,7 +141,7 @@ export default function SavedResultsPanel({
         color: "#ffffff",
         font: {
           size: 13,
-          weight: "500" as const,
+          weight: 500,
         },
         padding: {
           bottom: 10,

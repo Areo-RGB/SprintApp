@@ -250,6 +250,7 @@ function applyDevMockControl(currentSnapshot: any, path: string, body: any) {
 
 export default function App() {
   const [snapshot, setSnapshot] = useState<any>(() => (DEV_UI_MOCK_MODE ? createDevMockSnapshot() : null));
+  const [appVersion, setAppVersion] = useState("v--");
   const [wsConnected, setWsConnected] = useState(() => DEV_UI_MOCK_MODE);
   const [busyAction, setBusyAction] = useState("");
   const [lastError, setLastError] = useState("");
@@ -904,8 +905,66 @@ export default function App() {
     setSpeedUnit((previous) => (previous === "kmh" ? "mps" : "kmh"));
   }
 
+  async function loadAppVersion() {
+    try {
+      const tauriAppApi = (window as any).__TAURI__?.app;
+      const tauriVersion =
+        (await tauriAppApi?.getVersion?.()) ??
+        (await (window as any).__TAURI_INTERNALS__?.invoke?.("plugin:app|version"));
+      if (typeof tauriVersion === "string" && tauriVersion.trim().length > 0) {
+        setAppVersion(`v${tauriVersion.trim()}`);
+      }
+    } catch {
+      // Keep fallback value for non-Tauri browser contexts.
+    }
+  }
+
+  async function minimizeWindow() {
+    try {
+      const tauriWindowApi = (window as any).__TAURI__?.window;
+      const currentWindow =
+        tauriWindowApi?.getCurrentWindow?.() ??
+        tauriWindowApi?.getCurrent?.();
+      if (currentWindow && typeof currentWindow.minimize === "function") {
+        await currentWindow.minimize();
+        return;
+      }
+    } catch {
+      // noop: fallback path below
+    }
+
+    try {
+      const invoke = (window as any).__TAURI_INTERNALS__?.invoke;
+      if (typeof invoke === "function") {
+        await invoke("plugin:window|minimize", { label: "main" });
+      }
+    } catch {
+      // noop in non-Tauri browser contexts
+    }
+  }
+
+  useEffect(() => {
+    void loadAppVersion();
+  }, []);
+
   return (
     <div className="min-h-screen bg-black text-slate-900">
+      <div className="fixed right-3 top-3 z-40 flex items-center gap-2">
+        <span className="rounded border border-slate-700/60 bg-slate-900/55 px-2 py-1 text-[10px] font-medium tracking-wide text-slate-400">
+          {appVersion}
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            void minimizeWindow();
+          }}
+          title="Minimize window"
+          aria-label="Minimize window"
+          className="h-8 w-8 rounded-md border border-slate-600/70 bg-slate-900/70 text-lg leading-none text-slate-300 transition-colors hover:border-slate-400 hover:text-white"
+        >
+          −
+        </button>
+      </div>
       <main className="flex w-full flex-col gap-4 px-2 pb-2 pt-0 md:px-3 md:pb-3 md:pt-0">
         <section className="space-y-4">
           {lastError ? (

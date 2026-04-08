@@ -37,7 +37,8 @@
     "windows:package:exe": "npm run windows:package:desktop",
     "windows:package:start:exe": "npm run windows:package:desktop && cmd.exe /c start \"\" \"%cd%\\apps\\windows\\desktop-tauri\\src-tauri\\target\\release\\sprint-sync-windows-desktop-tauri.exe\"",
     "run:android-and-exe": "npm run rebuild:debug:devices:adb && npm run windows:package:start:exe",
-    "release:android": "node scripts/release-android.mjs"
+    "release:android": "node scripts/release-android.mjs",
+    "release:windows": "node scripts/release-windows.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

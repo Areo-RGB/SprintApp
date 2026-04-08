@@ -1,4 +1,7 @@
 use include_dir::{include_dir, Dir, File};
+use reqwest::header::{ACCEPT, USER_AGENT};
+use semver::Version;
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::env;
 use std::fs;
@@ -17,6 +20,12 @@ const DEFAULT_TCP_PORT: u16 = 9000;
 const DEFAULT_HTTP_HOST: &str = "127.0.0.1";
 const DEFAULT_TCP_HOST: &str = "0.0.0.0";
 const STARTUP_TIMEOUT_SECONDS: u64 = 20;
+const GITHUB_REPO_OWNER: &str = "Areo-RGB";
+const GITHUB_REPO_NAME: &str = "SprintApp";
+const WINDOWS_RELEASE_TAG_PREFIX: &str = "win-v";
+const GITHUB_RELEASES_PAGE_SIZE: u8 = 20;
+// Keep this identifier stable so GitHub API requests are easy to trace in logs.
+const GITHUB_USER_AGENT: &str = "sprint-sync-windows-desktop-updater";
 
 static BACKEND_DIST: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../backend/dist");
 
@@ -89,6 +98,20 @@ struct ExtractedPayload {
     backend_entry_path: PathBuf,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+struct GithubReleaseAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubRelease {
+    tag_name: String,
+    assets: Vec<GithubReleaseAsset>,
+    draft: bool,
+    prerelease: bool,
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -134,7 +157,163 @@ fn launch_application(app: &AppHandle) -> Result<(), StartupError> {
     }
 
     create_main_window(app, &backend_url)?;
+    schedule_windows_release_update_check(app.clone());
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn schedule_windows_release_update_check(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = check_and_install_windows_update(app.clone()).await {
+            eprintln!("Windows update check skipped: {error}");
+        }
+    });
+}
+
+#[cfg(not(target_os = "windows"))]
+fn schedule_windows_release_update_check(_app: AppHandle) {}
+
+#[cfg(target_os = "windows")]
+async fn check_and_install_windows_update(app: AppHandle) -> Result<(), String> {
+    let current_version = Version::parse(&app.package_info().version.to_string())
+        .map_err(|err| format!("Current app version is not valid semver: {err}"))?;
+
+    let releases = fetch_github_releases().await?;
+    let Some((latest_tag, latest_version, installer_asset)) =
+        select_latest_windows_release(releases.into_iter())
+    else {
+        return Ok(());
+    };
+
+    if latest_version <= current_version {
+        return Ok(());
+    }
+
+    let installer_path = download_installer_if_missing(&latest_tag, &installer_asset).await?;
+    app.dialog()
+        .message(format!(
+            "A new Windows release ({latest_version}) has been downloaded.\n\nSprint Sync will close and start the installer."
+        ))
+        .title(APP_TITLE)
+        .blocking_show();
+
+    Command::new(&installer_path)
+        .spawn()
+        .map_err(|err| format!("Failed to launch installer: {err}"))?;
+    app.exit(0);
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+async fn fetch_github_releases() -> Result<Vec<GithubRelease>, String> {
+    let releases_url = format!(
+        "https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases?per_page={GITHUB_RELEASES_PAGE_SIZE}"
+    );
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .build()
+        .map_err(|err| format!("Failed to build HTTP client: {err}"))?;
+
+    let response = client
+        .get(releases_url)
+        .header(USER_AGENT, GITHUB_USER_AGENT)
+        .header(ACCEPT, "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|err| format!("GitHub releases request failed: {err}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "GitHub releases request returned status {}",
+            response.status()
+        ));
+    }
+
+    response
+        .json::<Vec<GithubRelease>>()
+        .await
+        .map_err(|err| format!("Failed to parse GitHub releases response: {err}"))
+}
+
+#[cfg(target_os = "windows")]
+fn select_latest_windows_release(
+    releases: impl Iterator<Item = GithubRelease>,
+) -> Option<(String, Version, GithubReleaseAsset)> {
+    releases
+        .filter(|release| !release.draft && !release.prerelease)
+        .filter_map(|release| {
+            let version = parse_windows_release_version(&release.tag_name)?;
+            let asset = select_windows_installer_asset(&release.assets)?.clone();
+            Some((release.tag_name, version, asset))
+        })
+        .max_by(|left, right| left.1.cmp(&right.1))
+}
+
+#[cfg(target_os = "windows")]
+fn parse_windows_release_version(tag_name: &str) -> Option<Version> {
+    let raw_version = tag_name.strip_prefix(WINDOWS_RELEASE_TAG_PREFIX)?;
+    Version::parse(raw_version).ok()
+}
+
+#[cfg(target_os = "windows")]
+fn select_windows_installer_asset(assets: &[GithubReleaseAsset]) -> Option<&GithubReleaseAsset> {
+    assets
+        .iter()
+        .find(|asset| asset.name.ends_with("-setup.exe"))
+        .or_else(|| {
+            assets.iter().find(|asset| {
+                asset.name.ends_with(".exe") && asset.name.to_ascii_lowercase().contains("setup")
+            })
+        })
+        .or_else(|| assets.iter().find(|asset| asset.name.ends_with(".msi")))
+}
+
+#[cfg(target_os = "windows")]
+async fn download_installer_if_missing(
+    release_tag: &str,
+    installer_asset: &GithubReleaseAsset,
+) -> Result<PathBuf, String> {
+    let local_data = dirs::data_local_dir()
+        .ok_or_else(|| "Unable to resolve local app data directory".to_string())?;
+    let release_dir = local_data
+        .join("SprintSync")
+        .join("updates")
+        .join(release_tag);
+    fs::create_dir_all(&release_dir)
+        .map_err(|err| format!("Failed to create updater folder: {err}"))?;
+
+    let installer_path = release_dir.join(&installer_asset.name);
+    if installer_path.exists() {
+        return Ok(installer_path);
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(120))
+        .build()
+        .map_err(|err| format!("Failed to build download client: {err}"))?;
+
+    let response = client
+        .get(&installer_asset.browser_download_url)
+        .header(USER_AGENT, GITHUB_USER_AGENT)
+        .send()
+        .await
+        .map_err(|err| format!("Failed to download installer: {err}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "Installer download failed with status {}",
+            response.status()
+        ));
+    }
+
+    let payload = response
+        .bytes()
+        .await
+        .map_err(|err| format!("Failed to read installer bytes: {err}"))?;
+    fs::write(&installer_path, payload.as_ref())
+        .map_err(|err| format!("Failed to write installer file: {err}"))?;
+
+    Ok(installer_path)
 }
 
 fn ensure_webview2_runtime() -> Result<(), StartupError> {
