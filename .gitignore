@@ -64,3 +64,19 @@ apps/windows/ui/dist
 .agents
 /.agents
 Neo4j-*-Created-*.txt
+apps/windows/.codanna
+.codanna
+apps/android/.codanna
+.codanna
+/apps/android/.codanna
+/apps/windows/.codanna
+/apps/windows/.codanna/index/tantivy
+/apps/windows/.codanna/index/semantic
+/apps/android/.codanna/index
+/apps/android/.fastembed_cache
+
+# Codanna local indexes/caches (all modules)
+**/.codanna/
+**/.fastembed_cache/
+/.vscode
+/scip-java
