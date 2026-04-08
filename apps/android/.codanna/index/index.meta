@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "data_source": {
+    "Tantivy": {
+      "path": ".codanna\\index\\tantivy",
+      "doc_count": 5846,
+      "timestamp": 1775664154
+    }
+  },
+  "symbol_count": 2702,
+  "file_count": 118,
+  "last_modified": 1775664154,
+  "indexed_paths": [
+    "\\\\?\\C:\\Users\\paul\\projects\\sprint-app\\apps\\android"
+  ]
+}

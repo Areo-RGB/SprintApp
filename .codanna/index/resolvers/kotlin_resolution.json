@@ -1,0 +1,27 @@
+{
+  "version": "1.0",
+  "hashes": {
+    "apps/android/app/build.gradle.kts": "475e0bfa8ba4165ff0c3461c145c5f9142f6e5b055bee2d203224c0a5fd4b546",
+    "apps/android/build.gradle.kts": "d45f776a9bf03bec4126d917a1ad7eb3c5295be3aa72c2f163f20b03c54d7c04"
+  },
+  "mappings": {
+    "apps/android/**/*.kt": "apps/android/build.gradle.kts",
+    "apps/android/app/**/*.kt": "apps/android/app/build.gradle.kts"
+  },
+  "rules": {
+    "apps/android/app/build.gradle.kts": {
+      "baseUrl": null,
+      "paths": {
+        "apps/android/app\\src/main/kotlin": [],
+        "apps/android/app\\src/test/kotlin": []
+      }
+    },
+    "apps/android/build.gradle.kts": {
+      "baseUrl": null,
+      "paths": {
+        "apps/android\\src/main/kotlin": [],
+        "apps/android\\src/test/kotlin": []
+      }
+    }
+  }
+}
