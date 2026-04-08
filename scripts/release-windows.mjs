@@ -40,6 +40,9 @@ const bundleRoot = path.join(
   'release',
   'bundle'
 );
+const tauriConfigRepoPath = 'apps/windows/desktop-tauri/src-tauri/tauri.conf.json';
+const cargoTomlRepoPath = 'apps/windows/desktop-tauri/src-tauri/Cargo.toml';
+const desktopPackageJsonRepoPath = 'apps/windows/desktop-tauri/package.json';
 
 function bumpPatchVersion(version) {
   const parts = version.split('.').map((part) => Number.parseInt(part, 10));
@@ -78,31 +81,67 @@ function walkFiles(dirPath) {
   return all;
 }
 
-function pickInstallerAsset() {
+function pickInstallerAssets(nextVersion) {
   const files = walkFiles(bundleRoot);
-  const nsisExe = files.find(
-    (filePath) =>
-      filePath.toLowerCase().includes(`${path.sep}nsis${path.sep}`) &&
-      filePath.toLowerCase().endsWith('.exe')
-  );
-  if (nsisExe) {
-    return nsisExe;
-  }
+  const normalizedVersion = `_${nextVersion}_`;
 
-  const setupExe = files.find((filePath) => {
+  const nsisCandidates = files.filter((filePath) => {
     const lower = filePath.toLowerCase();
-    return lower.endsWith('.exe') && lower.includes('setup');
+    return lower.includes(`${path.sep}nsis${path.sep}`) && lower.endsWith('-setup.exe');
   });
-  if (setupExe) {
-    return setupExe;
-  }
+  const msiCandidates = files.filter((filePath) => {
+    const lower = filePath.toLowerCase();
+    return lower.includes(`${path.sep}msi${path.sep}`) && lower.endsWith('.msi');
+  });
 
-  const msi = files.find((filePath) => filePath.toLowerCase().endsWith('.msi'));
+  const pickNewestCandidate = (candidates) => {
+    if (candidates.length === 0) return null;
+    const exact = candidates.filter((filePath) =>
+      path.basename(filePath).toLowerCase().includes(normalizedVersion.toLowerCase()),
+    );
+    const pool = exact.length > 0 ? exact : candidates;
+    return pool
+      .map((filePath) => ({ filePath, mtimeMs: fs.statSync(filePath).mtimeMs }))
+      .sort((a, b) => b.mtimeMs - a.mtimeMs)[0].filePath;
+  };
+
+  const nsisExe = pickNewestCandidate(nsisCandidates);
+  const msi = pickNewestCandidate(msiCandidates);
+
+  const assets = [];
+  if (nsisExe) {
+    assets.push(nsisExe);
+  }
   if (msi) {
-    return msi;
+    assets.push(msi);
+  }
+  if (assets.length > 0) {
+    return assets;
   }
 
-  throw new Error(`Could not find a Windows installer asset under ${bundleRoot}`);
+  throw new Error(`Could not find Windows installer assets under ${bundleRoot}`);
+}
+
+function hasStagedChanges() {
+  try {
+    execSync('git diff --cached --quiet', { cwd: rootDir, stdio: 'ignore' });
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+function releaseTagExists(tagName) {
+  try {
+    execSync(`gh release view ${tagName}`, { cwd: rootDir, stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function quoteShellArg(value) {
+  return `"${String(value).replace(/"/g, '\\"')}"`;
 }
 
 function run() {
@@ -130,29 +169,43 @@ function run() {
   console.log('\nBuilding Windows desktop release...');
   execSync('npm run windows:package:desktop', { stdio: 'inherit', cwd: rootDir });
 
-  const installerPath = pickInstallerAsset();
-  console.log(`Installer built: ${installerPath}`);
+  const installerAssets = pickInstallerAssets(nextVersion);
+  console.log(`Installer assets built:\n${installerAssets.map((asset) => `  - ${asset}`).join('\n')}`);
 
   console.log('\nCommitting version bump locally...');
   execSync(
-    `git add "${tauriConfigPath}" "${cargoTomlPath}" "${desktopPackageJsonPath}"`,
+    `git add -- "${tauriConfigRepoPath}" "${cargoTomlRepoPath}" "${desktopPackageJsonRepoPath}"`,
     { stdio: 'inherit', cwd: rootDir }
   );
-  execSync(`git commit -m "chore: bump windows version to win-v${nextVersion}"`, {
-    stdio: 'inherit',
-    cwd: rootDir,
-  });
+
+  if (hasStagedChanges()) {
+    execSync(`git commit -m "chore: bump windows version to win-v${nextVersion}"`, {
+      stdio: 'inherit',
+      cwd: rootDir,
+    });
+  } else {
+    console.log('No version-file changes staged; continuing without creating a new commit.');
+  }
 
   console.log('\nPushing changes to remote...');
   execSync('git push', { stdio: 'inherit', cwd: rootDir });
 
   const tagName = `win-v${nextVersion}`;
   const releaseTitle = `Windows Release ${tagName}`;
-  console.log(`\nCreating GitHub Release for tag ${tagName}...`);
-  execSync(
-    `gh release create ${tagName} "${installerPath}" --title "${releaseTitle}" --generate-notes`,
-    { stdio: 'inherit', cwd: rootDir }
-  );
+  const assetArgs = installerAssets.map((assetPath) => quoteShellArg(assetPath)).join(' ');
+  if (releaseTagExists(tagName)) {
+    console.log(`\nRelease ${tagName} already exists; uploading assets with --clobber...`);
+    execSync(`gh release upload ${tagName} ${assetArgs} --clobber`, {
+      stdio: 'inherit',
+      cwd: rootDir,
+    });
+  } else {
+    console.log(`\nCreating GitHub Release for tag ${tagName}...`);
+    execSync(
+      `gh release create ${tagName} ${assetArgs} --title "${releaseTitle}" --generate-notes`,
+      { stdio: 'inherit', cwd: rootDir }
+    );
+  }
 
   console.log('\nWindows release created successfully!');
   console.log(`https://github.com/Areo-RGB/SprintApp/releases/tag/${tagName}`);
