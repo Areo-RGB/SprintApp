@@ -4,6 +4,7 @@ import {
   formatMeters,
   formatSpeedWithUnit,
 } from "../utils";
+import type { ControlPath, MonitoringPointRow } from "../api/types";
 import ActionButton from "./ActionButton";
 
 type RaceTimerPanelProps = {
@@ -12,12 +13,12 @@ type RaceTimerPanelProps = {
   activeTab: string;
   onOpenSavedResults: () => void;
   busyAction: string;
-  postControl: (path: string, body?: unknown, actionKey?: string) => Promise<unknown>;
+  postControl: (path: ControlPath, body?: unknown, actionKey?: string) => Promise<unknown>;
   canStartMonitoring: boolean;
   monitoringActive: boolean;
   saveResultsJson: () => void;
   canSaveResults: boolean;
-  monitoringPointRows: Array<{ lap: any; pointSpeedMps: number | null; accelerationMps2: number | null }>;
+  monitoringPointRows: MonitoringPointRow[];
   speedUnit: string;
   toggleSpeedUnit: () => void;
   mergeWithHeader?: boolean;

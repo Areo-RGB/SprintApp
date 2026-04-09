@@ -16,21 +16,28 @@ import {
   formatDurationNanos,
   formatIsoTime,
 } from "../utils";
+import type {
+  CompareResultsPayload,
+  MonitoringPointRow,
+  SavedResultSummary,
+  SavedResultsFilePayload,
+} from "../api/types";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Title, SubTitle);
 
 type SavedResultsPanelProps = {
   savedResultsLoading: boolean;
   fetchSavedResultsList: (preferredFileName?: string | null) => void;
-  savedResults: any[];
+  savedResults: SavedResultSummary[];
   selectedSavedFileName: string;
   setSelectedSavedFileName: (fileName: string) => void;
-  setSelectedSavedMeta: (item: any) => void;
+  setSelectedSavedMeta: (item: SavedResultSummary | null) => void;
   savedResultLoading: boolean;
-  selectedSavedPayload: any;
-  selectedSavedMeta: any;
-  savedLatestLapResults: any[];
-  savedMonitoringPointRows: Array<{ lap: any; pointSpeedMps: number | null; accelerationMps2: number | null }>;
+  selectedSavedPayload: SavedResultsFilePayload | null;
+  selectedSavedMeta: SavedResultSummary | null;
+  savedLatestLapResults: SavedResultsFilePayload["latestLapResults"];
+  savedMonitoringPointRows: MonitoringPointRow[];
+  compareResultsPayload: CompareResultsPayload | null;
 };
 
 export default function SavedResultsPanel({
@@ -45,6 +52,7 @@ export default function SavedResultsPanel({
   selectedSavedMeta,
   savedLatestLapResults,
   savedMonitoringPointRows,
+  compareResultsPayload,
 }: SavedResultsPanelProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDataTableOpen, setIsDataTableOpen] = useState(false);
@@ -59,34 +67,24 @@ export default function SavedResultsPanel({
     Number.isFinite(lap?.elapsedNanos) ? Number((lap.elapsedNanos / 1_000_000_000).toFixed(3)) : null,
   );
   const comparisonChartData = useMemo(() => {
-    const baseSeries = chartTimeSeconds.map((value) => (Number.isFinite(value) ? Number(value) : null));
-    const hasBaseSeries = baseSeries.some((value) => Number.isFinite(value));
-    if (!hasBaseSeries) {
+    if (!compareResultsPayload || compareResultsPayload.series.length === 0) {
       return null;
     }
 
-    const exportedAt =
-      typeof selectedSavedPayload?.exportedAtIso === "string" && selectedSavedPayload.exportedAtIso.length > 0
-        ? new Date(selectedSavedPayload.exportedAtIso)
-        : new Date();
+    const labels = compareResultsPayload.labels.length > 0 ? compareResultsPayload.labels : chartLabels;
+    if (labels.length === 0) {
+      return null;
+    }
 
-    const multipliers = [1.12, 1.08, 1.04, 1.0];
-    const highContrastColors = ["#000000", "#FF1744", "#2962FF", "#00E676"];
-    const datasets = multipliers.map((multiplier, index) => {
-      const runDate = new Date(exportedAt);
-      runDate.setDate(exportedAt.getDate() - (multipliers.length - 1 - index));
-      const dateLabel = runDate.toLocaleDateString();
-
-      const scaledSeries = baseSeries.map((value, pointIndex) => {
-        if (!Number.isFinite(value)) return null;
-        const progressionBias = 1 + pointIndex * 0.006;
-        return Number((value * multiplier * progressionBias).toFixed(3));
-      });
-
+    const highContrastColors = ["#000000", "#FF1744", "#2962FF", "#00E676", "#FF9100", "#7C4DFF"];
+    const datasets = compareResultsPayload.series.map((series, index) => {
       const color = highContrastColors[index % highContrastColors.length];
       return {
-        label: dateLabel,
-        data: scaledSeries,
+        label: series.label,
+        data: labels.map((_, labelIndex) => {
+          const value = series.valuesSeconds?.[labelIndex];
+          return Number.isFinite(value) ? Number(value) : null;
+        }),
         borderColor: color,
         backgroundColor: `${color}33`,
         pointBackgroundColor: color,
@@ -98,11 +96,18 @@ export default function SavedResultsPanel({
       };
     });
 
+    const hasAnyData = datasets.some((dataset) =>
+      Array.isArray(dataset.data) && dataset.data.some((value) => Number.isFinite(value as number)),
+    );
+    if (!hasAnyData) {
+      return null;
+    }
+
     return {
-      labels: chartLabels,
+      labels,
       datasets,
     };
-  }, [chartLabels, chartTimeSeconds, selectedSavedPayload?.exportedAtIso]);
+  }, [chartLabels, compareResultsPayload]);
 
   const comparisonChartOptions = {
     responsive: true,
@@ -135,7 +140,7 @@ export default function SavedResultsPanel({
         display: true,
         position: "top" as const,
         align: "center" as const,
-        text: `Athlete: ${selectedSavedPayload?.athleteName ?? selectedSavedMeta?.athleteName ?? "-"}`,
+        text: `Athlete: ${compareResultsPayload?.athleteName ?? selectedSavedPayload?.athleteName ?? selectedSavedMeta?.athleteName ?? "-"}`,
         color: "#000000",
         font: {
           family: "'JetBrains Mono', monospace",
@@ -282,9 +287,9 @@ export default function SavedResultsPanel({
           ) : (
             <div className="space-y-6">
               {comparisonChartData ? (
-                <div className="space-y-6">
+                  <div className="space-y-6">
                   <div className="h-[38rem] border-[4px] border-black bg-white p-4 shadow-[inset_2px_2px_0px_0px_rgba(0,0,0,0.05)] bg-[linear-gradient(to_right,#000_1px,transparent_1px),linear-gradient(to_bottom,#000_1px,transparent_1px)] bg-[size:2rem_2rem]">
-                    <div className="h-full w-full bg-white/90 backdrop-blur-sm p-2 border-2 border-black">
+                      <div className="h-full w-full bg-white/90 backdrop-blur-sm p-2 border-2 border-black" role="img" aria-label="Historical run comparison chart">
                       <Line data={comparisonChartData} options={comparisonChartOptions} />
                     </div>
                   </div>
@@ -300,7 +305,7 @@ export default function SavedResultsPanel({
 
                     {isDataTableOpen ? (
                       <div className="mt-4 overflow-auto border-[2px] border-black">
-                        <table className="min-w-full text-left text-sm">
+                        <table className="min-w-full text-left text-sm" aria-label="Historical comparison table">
                           <thead className="bg-[#FFEA00] text-xs font-bold uppercase tracking-widest text-black border-b-[2px] border-black">
                             <tr>
                               <th className="p-3 border-r-[2px] border-black">Checkpoint</th>

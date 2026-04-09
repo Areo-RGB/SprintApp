@@ -1,11 +1,12 @@
 import ActionButton from "./ActionButton";
 import { formatMeters } from "../utils";
+import type { CameraFacing, ClientSnapshot, RoleLabel } from "../api/types";
 
 type DeviceCardProps = {
   key?: string | number;
-  client: any;
+  client: ClientSnapshot;
   targetId: string;
-  assignedRole: string;
+  assignedRole: RoleLabel;
   monitoringActive: boolean;
   busyAction: string;
   actionKey: string;
@@ -13,16 +14,16 @@ type DeviceCardProps = {
   sensitivityActionKey: string;
   distanceActionKey: string;
   resyncActionKey: string;
-  cameraFacing: "front" | "rear";
+  cameraFacing: CameraFacing;
   latencyLabel: string;
   syncLabel: string;
-  clientRoleOptions: string[];
+  clientRoleOptions: RoleLabel[];
   sensitivityDraft: string;
   distanceDraft: string;
   effectiveSensitivity: number;
   effectiveDistance: number;
-  assignRole: (targetId: string, role: string) => void;
-  toggleCameraFacing: (targetId: string, cameraFacing: "front" | "rear") => void;
+  assignRole: (targetId: string, role: RoleLabel) => void;
+  toggleCameraFacing: (targetId: string, cameraFacing: CameraFacing) => void;
   updateSensitivityDraft: (targetId: string, value: string, fallback: number) => void;
   updateDistanceDraft: (targetId: string, value: string, fallback: number) => void;
   requestDeviceClockResync: (targetId: string) => void;

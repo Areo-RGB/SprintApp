@@ -1,6 +1,39 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { deriveMonitoringElapsedMs } from "./raceClock.js";
 import {
+  assignRole as tauriAssignRole,
+  compareResults as tauriCompareResults,
+  getState as tauriGetState,
+  isTauriRuntime,
+  listResults as tauriListResults,
+  loadResult as tauriLoadResult,
+  resetRun as tauriResetRun,
+  resyncDevice as tauriResyncDevice,
+  saveResults as tauriSaveResults,
+  startMonitoring as tauriStartMonitoring,
+  stopMonitoring as tauriStopMonitoring,
+  subscribeStateUpdates,
+  updateDeviceConfig as tauriUpdateDeviceConfig,
+} from "./api/tauriApi";
+import {
+  applyMockControl,
+  compareMockResults,
+  createMockSnapshot,
+  listMockResults,
+  loadMockResult,
+  saveMockResults,
+} from "./api/mockApi";
+import type {
+  CompareResultsPayload,
+  ControlPath,
+  MonitoringPointRow,
+  RoleLabel,
+  SaveResultsRequest,
+  SavedResultSummary,
+  SavedResultsFilePayload,
+  Snapshot,
+} from "./api/types";
+import {
   buildMonitoringPointRows,
   computeProgressiveRoleOptions,
   formatDateForResultName,
@@ -18,175 +51,14 @@ import DeviceCard from "./components/DeviceCard";
 import RaceTimerPanel from "./components/RaceTimerPanel";
 import SavedResultsPanel from "./components/SavedResultsPanel";
 import SystemDetails from "./components/SystemDetails";
-import { generateDemoRuns } from "./demoData";
 
 const AUTO_APPLY_DELAY_MS = 350;
-const DEV_UI_MOCK_MODE = import.meta.env.DEV || import.meta.env.VITE_USE_DEV_MOCK === "true";
-
-function createDevMockSnapshot() {
-  const now = Date.now();
-  return {
-    session: {
-      stage: "MONITORING",
-      monitoringActive: true,
-      monitoringStartedAtMs: now - 9_500,
-      monitoringElapsedMs: 9_500,
-      hostStartSensorNanos: 1_000_000_000,
-      hostStopSensorNanos: null,
-      hostSplitMarks: [
-        { roleLabel: "Split 1", elapsedNanos: 4_320_000_000 },
-        { roleLabel: "Split 2", elapsedNanos: 7_910_000_000 },
-      ],
-      roleOptions: ["Unassigned", "Start", "Split 1", "Split 2", "Split 3", "Split 4", "Stop"],
-      runId: "dev-ui-mock",
-    },
-    clients: [
-      {
-        roleTarget: "dev-device-1",
-        senderDeviceName: "Pixel 8 Pro",
-        assignedRole: "Start",
-        sensitivity: 100,
-        distanceMeters: 0,
-        cameraFacing: "rear",
-        telemetryLatencyMs: 14,
-        telemetryClockSynced: true,
-      },
-      {
-        roleTarget: "dev-device-2",
-        senderDeviceName: "Galaxy S24",
-        assignedRole: "Split 1",
-        sensitivity: 98,
-        distanceMeters: 10,
-        cameraFacing: "rear",
-        telemetryLatencyMs: 19,
-        telemetryClockSynced: true,
-      },
-      {
-        roleTarget: "dev-device-3",
-        senderDeviceName: "iPhone 15",
-        assignedRole: "Stop",
-        sensitivity: 95,
-        distanceMeters: 20,
-        cameraFacing: "rear",
-        telemetryLatencyMs: 16,
-        telemetryClockSynced: true,
-      },
-    ],
-    latestLapResults: [
-      {
-        id: "dev-lap-split-1",
-        roleLabel: "Split 1",
-        senderDeviceName: "Galaxy S24",
-        distanceMeters: 10,
-        elapsedNanos: 4_320_000_000,
-        lapElapsedNanos: 4_320_000_000,
-        lapSpeedMps: 2.31,
-      },
-      {
-        id: "dev-lap-split-2",
-        roleLabel: "Split 2",
-        senderDeviceName: "Galaxy S24",
-        distanceMeters: 15,
-        elapsedNanos: 7_910_000_000,
-        lapElapsedNanos: 3_590_000_000,
-        lapSpeedMps: 1.39,
-      },
-      {
-        id: "dev-lap-stop",
-        roleLabel: "Stop",
-        senderDeviceName: "iPhone 15",
-        distanceMeters: 20,
-        elapsedNanos: 9_480_000_000,
-        lapElapsedNanos: 1_570_000_000,
-        lapSpeedMps: 3.18,
-      },
-    ],
-    recentEvents: [
-      { id: "dev-evt-1", message: "Monitoring active (dev mock)", level: "info", timestampIso: new Date(now - 8000).toISOString() },
-      { id: "dev-evt-2", message: "Split 1 captured", level: "info", timestampIso: new Date(now - 5200).toISOString() },
-      { id: "dev-evt-3", message: "Split 2 captured", level: "info", timestampIso: new Date(now - 1600).toISOString() },
-    ],
-    resultsExport: {
-      lastSavedFilePath: "",
-      lastSavedAtIso: "",
-    },
-    stats: {
-      knownTypes: {
-        SESSION_SNAPSHOT: 42,
-        TELEMETRY: 315,
-      },
-    },
-  };
-}
-
-function applyDevMockControl(currentSnapshot: any, path: string, body: any) {
-  if (!currentSnapshot || typeof currentSnapshot !== "object") {
-    return currentSnapshot;
-  }
-
-  const nextSnapshot = {
-    ...currentSnapshot,
-    session: { ...(currentSnapshot.session ?? {}) },
-    clients: Array.isArray(currentSnapshot.clients) ? [...currentSnapshot.clients] : [],
-    latestLapResults: Array.isArray(currentSnapshot.latestLapResults) ? [...currentSnapshot.latestLapResults] : [],
-  };
-
-  const session = nextSnapshot.session;
-  const now = Date.now();
-
-  switch (path) {
-    case "/api/control/start-monitoring":
-      session.stage = "MONITORING";
-      session.monitoringActive = true;
-      session.monitoringStartedAtMs = now;
-      return nextSnapshot;
-    case "/api/control/stop-monitoring":
-      session.stage = "SETUP";
-      session.monitoringActive = false;
-      return nextSnapshot;
-    case "/api/control/reset-run":
-      session.stage = "SETUP";
-      session.monitoringActive = false;
-      session.monitoringStartedAtMs = null;
-      session.monitoringElapsedMs = 0;
-      session.hostStartSensorNanos = null;
-      session.hostStopSensorNanos = null;
-      session.hostSplitMarks = [];
-      nextSnapshot.latestLapResults = [];
-      return nextSnapshot;
-    case "/api/control/assign-role": {
-      const targetId = body?.targetId;
-      const role = body?.role;
-      if (typeof targetId === "string" && typeof role === "string") {
-        nextSnapshot.clients = nextSnapshot.clients.map((client: any) =>
-          client?.roleTarget === targetId ? { ...client, assignedRole: role } : client,
-        );
-      }
-      return nextSnapshot;
-    }
-    case "/api/control/device-config": {
-      const targetId = body?.targetId;
-      if (typeof targetId === "string") {
-        nextSnapshot.clients = nextSnapshot.clients.map((client: any) => {
-          if (client?.roleTarget !== targetId) return client;
-          return {
-            ...client,
-            ...(body?.cameraFacing ? { cameraFacing: body.cameraFacing } : {}),
-            ...(Number.isInteger(body?.sensitivity) ? { sensitivity: body.sensitivity } : {}),
-            ...(Number.isFinite(body?.distanceMeters) ? { distanceMeters: body.distanceMeters } : {}),
-          };
-        });
-      }
-      return nextSnapshot;
-    }
-    default:
-      return nextSnapshot;
-  }
-}
+const DEV_UI_MOCK_MODE = import.meta.env.VITE_USE_DEV_MOCK === "true";
+const USE_MOCK_API = DEV_UI_MOCK_MODE || !isTauriRuntime();
 
 export default function App() {
-  const [snapshot, setSnapshot] = useState<any>(() => (DEV_UI_MOCK_MODE ? createDevMockSnapshot() : null));
-  const [wsConnected, setWsConnected] = useState(() => DEV_UI_MOCK_MODE);
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(() => (USE_MOCK_API ? createMockSnapshot() : null));
+  const [wsConnected, setWsConnected] = useState(() => USE_MOCK_API);
   const [busyAction, setBusyAction] = useState("");
   const [lastError, setLastError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -194,84 +66,86 @@ export default function App() {
   const [distanceDraftByTarget, setDistanceDraftByTarget] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState("live");
   const [speedUnit, setSpeedUnit] = useState("kmh");
-  const [savedResults, setSavedResults] = useState<any[]>([]);
+  const [savedResults, setSavedResults] = useState<SavedResultSummary[]>([]);
   const [savedResultsLoading, setSavedResultsLoading] = useState(false);
   const [savedResultLoading, setSavedResultLoading] = useState(false);
   const [selectedSavedFileName, setSelectedSavedFileName] = useState("");
-  const [selectedSavedMeta, setSelectedSavedMeta] = useState<any>(null);
-  const [selectedSavedPayload, setSelectedSavedPayload] = useState<any>(null);
-  const [runHistory, setRunHistory] = useState<Array<{ key: string; rows: any[] }>>([]);
+  const [selectedSavedMeta, setSelectedSavedMeta] = useState<SavedResultSummary | null>(null);
+  const [selectedSavedPayload, setSelectedSavedPayload] = useState<SavedResultsFilePayload | null>(null);
+  const [compareResultsPayload, setCompareResultsPayload] = useState<CompareResultsPayload | null>(null);
+  const [runHistory, setRunHistory] = useState<Array<{ key: string; rows: MonitoringPointRow[] }>>([]);
   const [raceClockTickMs, setRaceClockTickMs] = useState(() => Date.now());
   const raceClockBaseMsRef = useRef<number | null>(null);
   const raceClockAnchorRef = useRef({
     elapsedMs: 0,
     capturedAtMs: Date.now(),
   });
-  const sensitivityApplyTimeoutsRef = useRef(new Map());
-  const distanceApplyTimeoutsRef = useRef(new Map());
+  const sensitivityApplyTimeoutsRef = useRef<Map<string, number>>(new Map());
+  const distanceApplyTimeoutsRef = useRef<Map<string, number>>(new Map());
 
   async function fetchState() {
     setRefreshing(true);
     try {
-      if (DEV_UI_MOCK_MODE) {
+      if (USE_MOCK_API) {
+        setSnapshot((previous) => previous ?? createMockSnapshot());
+        setWsConnected(true);
         setLastError("");
         return;
       }
-      const response = await fetch("/api/state");
-      if (!response.ok) throw new Error(`State request failed (${response.status})`);
-      setSnapshot(await response.json());
+
+      const latestState = await tauriGetState();
+      setSnapshot(latestState);
+      setWsConnected(true);
       setLastError("");
     } catch (error) {
+      setWsConnected(false);
       setLastError(error instanceof Error ? error.message : "State fetch failed");
     } finally {
       setRefreshing(false);
     }
   }
 
-  async function postControl(path: string, body: unknown = null, actionKey = path): Promise<any> {
+  async function postControl(path: ControlPath, body: unknown = null, actionKey: string = path): Promise<any> {
     setBusyAction(actionKey);
     try {
-      if (DEV_UI_MOCK_MODE) {
+      if (USE_MOCK_API) {
         if (path === "/api/control/save-results") {
-          const stored = localStorage.getItem('sprint_sync_results');
-          const items = stored ? JSON.parse(stored) : [];
-          const fileName = `result_${Date.now()}.json`;
-          const newResult = {
-            fileName,
-            resultName: (body as any).name,
-            athleteName: (body as any).athleteName,
-            notes: (body as any).notes,
-            exportedAtIso: new Date().toISOString(),
-            runId: snapshot?.session?.runId || `run-${Date.now()}`,
-            latestLapResults: snapshot?.latestLapResults || []
-          };
-          items.unshift(newResult);
-          localStorage.setItem('sprint_sync_results', JSON.stringify(items));
+          const saved = saveMockResults((body ?? {}) as SaveResultsRequest, snapshot);
           setLastError("");
-          return { ok: true, mock: true, fileName };
+          return saved;
         }
 
-        setSnapshot((previous: any) => applyDevMockControl(previous, path, body));
+        setSnapshot((previous) => applyMockControl(previous, path, (body as Record<string, unknown> | null) ?? null));
         setLastError("");
         return { ok: true, mock: true };
       }
 
-      const response = await fetch(path, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: body ? JSON.stringify(body) : undefined,
-      });
-
       let payload: any = {};
-      try {
-        payload = await response.json();
-      } catch {
-        payload = {};
-      }
-
-      if (!response.ok) {
-        const message = typeof payload?.error === "string" ? payload.error : `Request failed (${response.status})`;
-        throw new Error(message);
+      switch (path) {
+        case "/api/control/start-monitoring":
+          payload = await tauriStartMonitoring();
+          break;
+        case "/api/control/stop-monitoring":
+          payload = await tauriStopMonitoring();
+          break;
+        case "/api/control/reset-run":
+          payload = await tauriResetRun();
+          break;
+        case "/api/control/save-results":
+          payload = await tauriSaveResults((body ?? {}) as any);
+          break;
+        case "/api/control/assign-role":
+          payload = await tauriAssignRole((body ?? {}) as any);
+          break;
+        case "/api/control/device-config":
+          payload = await tauriUpdateDeviceConfig((body ?? {}) as any);
+          break;
+        case "/api/control/resync-device":
+          payload = await tauriResyncDevice((body ?? {}) as any);
+          break;
+        default:
+          payload = { ok: true };
+          break;
       }
 
       await fetchState();
@@ -288,43 +162,34 @@ export default function App() {
   async function fetchSavedResultsList(preferredFileName: string | null = null) {
     setSavedResultsLoading(true);
     try {
-      if (DEV_UI_MOCK_MODE) {
-        const stored = localStorage.getItem('sprint_sync_results');
-        let items = [];
-        if (!stored) {
-          items = generateDemoRuns();
-          localStorage.setItem('sprint_sync_results', JSON.stringify(items));
-        } else {
-          items = JSON.parse(stored);
-        }
-        const metaItems = items.map((item: any) => ({
-          fileName: item.fileName,
-          resultName: item.resultName,
-          athleteName: item.athleteName,
-          savedAtIso: item.exportedAtIso,
-          resultCount: item.latestLapResults?.length ?? 0,
-          bestElapsedNanos: item.latestLapResults?.[item.latestLapResults.length - 1]?.elapsedNanos ?? 0
-        }));
-        setSavedResults(metaItems);
+      if (USE_MOCK_API) {
+        const payload = listMockResults();
+        const items = Array.isArray(payload?.items) ? payload.items : [];
+        setSavedResults(items);
 
-        if (metaItems.length === 0) {
+        if (items.length === 0) {
           setSelectedSavedFileName("");
           setSelectedSavedMeta(null);
           setSelectedSavedPayload(null);
+          setCompareResultsPayload(null);
           return;
         }
 
         const desired = preferredFileName || selectedSavedFileName;
-        const selected = metaItems.find((item: any) => item.fileName === desired) ?? metaItems[0];
+        const selected = items.find((item) => item.fileName === desired) ?? items[0];
         setSelectedSavedFileName(selected.fileName);
         setSelectedSavedMeta(selected);
+
+        const comparePayload = compareMockResults({
+          fileNames: items.slice(0, 6).map((item) => item.fileName),
+          athleteName: selected.athleteName ?? undefined,
+        });
+        setCompareResultsPayload(comparePayload);
         setLastError("");
         return;
       }
 
-      const response = await fetch("/api/results");
-      if (!response.ok) throw new Error(`Saved results request failed (${response.status})`);
-      const payload = await response.json();
+      const payload = await tauriListResults();
       const items = Array.isArray(payload?.items) ? payload.items : [];
       setSavedResults(items);
 
@@ -332,6 +197,7 @@ export default function App() {
         setSelectedSavedFileName("");
         setSelectedSavedMeta(null);
         setSelectedSavedPayload(null);
+        setCompareResultsPayload(null);
         return;
       }
 
@@ -339,8 +205,15 @@ export default function App() {
       const selected = items.find((item) => item.fileName === desired) ?? items[0];
       setSelectedSavedFileName(selected.fileName);
       setSelectedSavedMeta(selected);
+
+      const comparePayload = await tauriCompareResults({
+        fileNames: items.slice(0, 6).map((item) => item.fileName),
+        athleteName: selected.athleteName ?? undefined,
+      });
+      setCompareResultsPayload(comparePayload);
     } catch (error) {
       setLastError(error instanceof Error ? error.message : "Saved results fetch failed");
+      setCompareResultsPayload(null);
     } finally {
       setSavedResultsLoading(false);
     }
@@ -354,33 +227,46 @@ export default function App() {
 
     setSavedResultLoading(true);
     try {
-      if (DEV_UI_MOCK_MODE) {
-        const stored = localStorage.getItem('sprint_sync_results');
-        const items = stored ? JSON.parse(stored) : [];
-        const payload = items.find((i: any) => i.fileName === fileName) || null;
-        setSelectedSavedPayload(payload);
+      if (USE_MOCK_API) {
+        const payload = loadMockResult(fileName);
+        setSelectedSavedPayload(payload.payload);
+
+        const comparePayload = compareMockResults({
+          fileNames: savedResults.slice(0, 6).map((item) => item.fileName),
+          athleteName: selectedSavedMeta?.athleteName ?? payload.payload.athleteName ?? undefined,
+        });
+        setCompareResultsPayload(comparePayload);
         setLastError("");
         return;
       }
 
-      const response = await fetch(`/api/results/${encodeURIComponent(fileName)}`);
-      if (!response.ok) throw new Error(`Saved result load failed (${response.status})`);
-      const payload = await response.json();
+      const payload = await tauriLoadResult(fileName);
       setSelectedSavedPayload(payload?.payload ?? null);
+
+      const comparePayload = await tauriCompareResults({
+        fileNames: savedResults.slice(0, 6).map((item) => item.fileName),
+        athleteName: selectedSavedMeta?.athleteName ?? payload?.payload?.athleteName ?? undefined,
+      });
+      setCompareResultsPayload(comparePayload);
       setLastError("");
     } catch (error) {
       setSelectedSavedPayload(null);
+      setCompareResultsPayload(null);
       setLastError(error instanceof Error ? error.message : "Saved result load failed");
     } finally {
       setSavedResultLoading(false);
     }
   }
 
-  function assignRole(targetId: string, role: string) {
+  function assignRole(targetId: string, role: RoleLabel) {
     postControl("/api/control/assign-role", { targetId, role }, `assign-role:${targetId}`);
   }
 
-  function updateDeviceConfig(targetId: string, patch: any, actionKey: string) {
+  function updateDeviceConfig(
+    targetId: string,
+    patch: { sensitivity?: number; cameraFacing?: string; distanceMeters?: number },
+    actionKey: string,
+  ) {
     postControl("/api/control/device-config", { targetId, ...patch }, actionKey);
   }
 
@@ -392,11 +278,11 @@ export default function App() {
     }
   }
 
-  function setCameraFacing(targetId: string, cameraFacing: string) {
+  function setCameraFacing(targetId: string, cameraFacing: "front" | "rear") {
     updateDeviceConfig(targetId, { cameraFacing }, `device-config-camera:${targetId}`);
   }
 
-  function toggleCameraFacing(targetId: string, currentCameraFacing: string) {
+  function toggleCameraFacing(targetId: string, currentCameraFacing: "front" | "rear") {
     const nextCameraFacing = currentCameraFacing === "front" ? "rear" : "front";
     setCameraFacing(targetId, nextCameraFacing);
   }
@@ -512,55 +398,43 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (DEV_UI_MOCK_MODE) {
-      return;
-    }
-
-    let socket: WebSocket;
     let disposed = false;
-    let reconnectHandle: number;
+    let unlisten: (() => void) | null = null;
 
-    function connect() {
-      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-      socket = new WebSocket(`${protocol}://${window.location.host}/ws`);
+    async function bootstrap() {
+      await fetchState();
+      await fetchSavedResultsList();
 
-      socket.onopen = () => {
-        if (disposed) return;
+      if (USE_MOCK_API || disposed) {
         setWsConnected(true);
-      };
+        return;
+      }
 
-      socket.onmessage = (event) => {
-        if (disposed) return;
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload.type === "snapshot" || payload.type === "state:update") {
-            setSnapshot(payload.payload);
+      try {
+        unlisten = await subscribeStateUpdates((nextSnapshot) => {
+          if (disposed) {
+            return;
           }
-        } catch {
-          setLastError("Malformed WebSocket payload");
+          setSnapshot(nextSnapshot);
+          setWsConnected(true);
+          setLastError("");
+        });
+        setWsConnected(true);
+      } catch (error) {
+        if (!disposed) {
+          setWsConnected(false);
+          setLastError(error instanceof Error ? error.message : "Failed to listen for backend updates");
         }
-      };
-
-      socket.onclose = () => {
-        if (disposed) return;
-        setWsConnected(false);
-        reconnectHandle = window.setTimeout(connect, 1500);
-      };
-
-      socket.onerror = () => {
-        if (disposed) return;
-        setLastError("WebSocket error");
-      };
+      }
     }
 
-    fetchState();
-    fetchSavedResultsList();
-    connect();
+    void bootstrap();
 
     return () => {
       disposed = true;
-      if (reconnectHandle) window.clearTimeout(reconnectHandle);
-      if (socket) socket.close();
+      if (unlisten) {
+        unlisten();
+      }
     };
   }, []);
 
@@ -627,11 +501,22 @@ export default function App() {
     return Object.entries(values).sort(([a], [b]) => a.localeCompare(b));
   }, [snapshot]);
 
-  const fallbackRoleOptions = useMemo(() => computeProgressiveRoleOptions(clients), [clients]);
-  const serverRoleOptions = useMemo(() => normalizeRoleOptions(session.roleOptions), [session.roleOptions]);
+  const fallbackRoleOptions = useMemo(
+    () =>
+      computeProgressiveRoleOptions(
+        clients
+          .map((client) => client.assignedRole)
+          .filter((roleLabel): roleLabel is string => typeof roleLabel === "string"),
+      ),
+    [clients],
+  );
+  const serverRoleOptions = useMemo(
+    () => normalizeRoleOptions(Array.isArray(session.roleOptions) ? session.roleOptions : []),
+    [session.roleOptions],
+  );
   const roleOptions = serverRoleOptions.length > 0 ? serverRoleOptions : fallbackRoleOptions;
-  const hasStartAssignment = clients.some((client: any) => client.assignedRole === "Start");
-  const hasStopAssignment = clients.some((client: any) => client.assignedRole === "Stop");
+  const hasStartAssignment = clients.some((client) => client.assignedRole === "Start");
+  const hasStopAssignment = clients.some((client) => client.assignedRole === "Stop");
   const canStartMonitoring = clients.length > 0 && hasStartAssignment && hasStopAssignment && !monitoringActive;
 
   const savedLatestLapResults = Array.isArray(selectedSavedPayload?.latestLapResults)
@@ -639,11 +524,14 @@ export default function App() {
     : [];
 
   const savedMonitoringPointRows = useMemo(
-    () => buildMonitoringPointRows(savedLatestLapResults),
+    () => buildMonitoringPointRows(savedLatestLapResults) as MonitoringPointRow[],
     [savedLatestLapResults],
   );
 
-  const monitoringPointRows = useMemo(() => buildMonitoringPointRows(latestLapResults), [latestLapResults]);
+  const monitoringPointRows = useMemo(
+    () => buildMonitoringPointRows(latestLapResults) as MonitoringPointRow[],
+    [latestLapResults],
+  );
 
   useEffect(() => {
     if (
@@ -820,6 +708,7 @@ export default function App() {
               selectedSavedMeta={selectedSavedMeta}
               savedLatestLapResults={savedLatestLapResults}
               savedMonitoringPointRows={savedMonitoringPointRows}
+              compareResultsPayload={compareResultsPayload}
             />
           </>
         ) : (
@@ -912,25 +801,25 @@ export default function App() {
                   <p className="text-sm font-bold uppercase text-gray-500">No peers connected yet.</p>
                 ) : (
                   <div className="flex gap-4 overflow-x-auto pb-2">
-                    {clients.map((client: any) => {
-                      const targetId = client.roleTarget;
+                    {clients.map((client) => {
+                      const targetId = client.roleTarget ?? client.endpointId ?? "unknown-target";
                       const actionKey = `assign-role:${targetId}`;
                       const cameraActionKey = `device-config-camera:${targetId}`;
                       const sensitivityActionKey = `device-config-sensitivity:${targetId}`;
                       const distanceActionKey = `device-config-distance:${targetId}`;
                       const resyncActionKey = `device-resync:${targetId}`;
-                      const assignedRole = client.assignedRole ?? "Unassigned";
+                      const assignedRole = typeof client.assignedRole === "string" ? client.assignedRole : "Unassigned";
                       const effectiveSensitivity =
-                        Number.isInteger(client.sensitivity) && client.sensitivity >= 1 && client.sensitivity <= 100
-                          ? client.sensitivity
+                        Number.isInteger(client.sensitivity) && Number(client.sensitivity) >= 1 && Number(client.sensitivity) <= 100
+                          ? Number(client.sensitivity)
                           : 100;
                       const sensitivityDraft = sensitivityDraftByTarget[targetId] ?? String(effectiveSensitivity);
                       const effectiveDistance =
-                        Number.isFinite(client.distanceMeters) && client.distanceMeters >= 0 ? client.distanceMeters : 0;
+                        Number.isFinite(client.distanceMeters) && Number(client.distanceMeters) >= 0 ? Number(client.distanceMeters) : 0;
                       const distanceDraft = distanceDraftByTarget[targetId] ?? String(effectiveDistance);
                       const cameraFacing = client.cameraFacing === "front" ? "front" : "rear";
                       const latencyLabel =
-                        Number.isInteger(client.telemetryLatencyMs) && client.telemetryLatencyMs >= 0
+                        Number.isInteger(client.telemetryLatencyMs) && Number(client.telemetryLatencyMs) >= 0
                           ? `${client.telemetryLatencyMs} ms`
                           : "-";
                       const syncLabel = client.telemetryClockSynced ? "Synced" : "Unsynced";
@@ -1012,13 +901,13 @@ export default function App() {
                     <p className="text-sm font-bold uppercase text-gray-500">No events logged yet.</p>
                   ) : (
                     <ul className="max-h-80 space-y-3 overflow-auto text-sm pr-2">
-                      {recentEvents.map((event: any) => (
+                      {recentEvents.map((event) => (
                         <li key={event.id} className="border-[2px] border-black bg-gray-100 px-4 py-3 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                           <div className="flex items-center justify-between gap-3">
                             <span className="font-bold text-black">{event.message}</span>
                             <span className={`text-xs font-bold uppercase tracking-widest px-2 py-1 border-[2px] border-black ${event.level === 'error' ? 'bg-[#FF1744] text-white' : 'bg-white text-black'}`}>{event.level}</span>
                           </div>
-                          <div className="mt-2 text-xs font-bold text-gray-500 font-mono">{event.timestampIso}</div>
+                          <div className="mt-2 text-xs font-bold text-gray-500 font-mono">{event.timestampIso ?? "-"}</div>
                         </li>
                       ))}
                     </ul>

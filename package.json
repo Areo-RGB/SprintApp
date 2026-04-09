@@ -3,7 +3,6 @@
   "private": true,
   "packageManager": "pnpm@10.30.1",
   "workspaces": [
-    "windows/backend",
     "windows/ui",
     "windows/desktop-tauri"
   ],
@@ -23,18 +22,19 @@
     "install:debug:devices:build": "npm run rebuild:debug:devices",
     "android:build:install:start": "npm run rebuild:debug:devices:adb",
     "windows:install": "npm install --workspaces --include-workspace-root",
-    "windows:dev": "concurrently \"npm run dev --workspace @sprint-sync/windows-backend\" \"npm run dev --workspace @sprint-sync/windows-ui\"",
+    "windows:dev": "npm run dev --workspace @sprint-sync/windows-desktop-tauri",
+    "windows:dev:desktop": "npm run windows:dev",
     "windows:start:all": "npm run windows:dev",
-    "windows:dev:backend": "npm run dev --workspace @sprint-sync/windows-backend",
+    "windows:dev:backend": "npm run windows:dev:desktop",
     "windows:dev:ui": "npm run dev --workspace @sprint-sync/windows-ui",
-    "windows:build": "npm run build --workspace @sprint-sync/windows-ui && npm run build --workspace @sprint-sync/windows-backend",
-    "windows:start": "npm run start --workspace @sprint-sync/windows-backend",
+    "windows:build": "npm run build --workspace @sprint-sync/windows-ui && npm run build --workspace @sprint-sync/windows-desktop-tauri",
+    "windows:start": "npm run windows:dev",
     "windows:start:exe": "cmd.exe /c start \"\" \"%cd%\\windows\\desktop-tauri\\src-tauri\\target\\release\\sprint-sync-windows-desktop-tauri.exe\"",
     "windows:kill:port:9000": "node scripts/windows-kill-port-9000.mjs",
     "windows:preview:ui": "npm run preview --workspace @sprint-sync/windows-ui",
-    "windows:package:backend": "npm install --include=optional && npm run build --workspace @sprint-sync/windows-ui && npm run package --workspace @sprint-sync/windows-backend",
-    "windows:package:backend:exe": "npm run windows:package:backend",
-    "windows:package:desktop": "npm run windows:kill:port:9000 && npm run windows:package:backend && npm run build --workspace @sprint-sync/windows-desktop-tauri && npm run windows:start:exe",
+    "windows:package:backend": "npm run windows:package:desktop",
+    "windows:package:backend:exe": "npm run windows:package:desktop",
+    "windows:package:desktop": "npm run windows:kill:port:9000 && npm run build --workspace @sprint-sync/windows-desktop-tauri && npm run windows:start:exe",
     "windows:package:desktop:build-tools": "cmd.exe /c \"\\\"C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat\\\" && npm run windows:package:desktop\"",
     "windows:package:exe": "npm run windows:package:desktop",
     "windows:package:start:exe": "npm run windows:package:desktop",
@@ -42,7 +42,5 @@
     "release:android": "node scripts/release-android.mjs",
     "release:windows": "node scripts/release-windows.mjs"
   },
-  "devDependencies": {
-    "concurrently": "^9.2.1"
-  }
+  "devDependencies": {}
 }

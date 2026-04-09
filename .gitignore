@@ -81,3 +81,4 @@ apps/android/.codanna
 **/.fastembed_cache/
 /.vscode
 /scip-java
+/.fastembed_cache/models--Qdrant--all-MiniLM-L6-v2-onnx

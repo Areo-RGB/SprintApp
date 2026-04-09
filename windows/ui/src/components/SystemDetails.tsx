@@ -1,14 +1,15 @@
 import Card from "./Card";
 import { stageLabel } from "../utils";
+import type { SessionSplitMark, SessionSnapshot, Snapshot } from "../api/types";
 
 type SystemDetailsProps = {
   stage: string;
-  session: any;
+  session: SessionSnapshot;
   monitoringActive: boolean;
   hostStartSensorNanos: number | null;
-  hostSplitMarks: Array<unknown>;
+  hostSplitMarks: SessionSplitMark[];
   hostStopSensorNanos: number | null;
-  snapshot: any;
+  snapshot: Snapshot | null;
 };
 
 export default function SystemDetails({

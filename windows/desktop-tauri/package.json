@@ -5,11 +5,9 @@
   "type": "module",
   "scripts": {
     "tauri": "tauri",
-    "prepare:runtime": "node scripts/prepare-runtime.mjs",
-    "build": "npm run prepare:runtime && tauri build",
-    "dev": "npm run prepare:runtime && tauri dev",
-    "test": "npm run prepare:runtime && cargo test --manifest-path src-tauri/Cargo.toml",
-    "smoke:exe": "powershell.exe -ExecutionPolicy Bypass -File scripts/windows/smoke-exe.ps1"
+    "build": "tauri build",
+    "dev": "tauri dev",
+    "test": "cargo test --manifest-path src-tauri/Cargo.toml"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0"

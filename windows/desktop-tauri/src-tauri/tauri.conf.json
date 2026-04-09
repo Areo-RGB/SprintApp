@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Sprint Sync",
+  "version": "0.2.0",
+  "identifier": "com.paul.sprintsync",
+  "build": {
+    "beforeDevCommand": "npm run dev --workspace @sprint-sync/windows-ui",
+    "beforeBuildCommand": "npm run build --workspace @sprint-sync/windows-ui",
+    "devUrl": "http://localhost:3000",
+    "frontendDist": "../../ui/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Sprint Sync",
+        "width": 1440,
+        "height": 960,
+        "minWidth": 1100,
+        "minHeight": 700,
+        "resizable": true,
+        "fullscreen": false,
+        "maximized": false
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "nsis",
+    "createUpdaterArtifacts": false,
+    "windows": {
+      "digestAlgorithm": "sha256"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "dialog": true,
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/Areo-RGB/SprintApp/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}
